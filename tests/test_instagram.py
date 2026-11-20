@@ -50,3 +50,10 @@ async def test_create_container_posts_form():
         assert b"is_carousel_item=true" in req.content
         return httpx.Response(200, json={"id": "c-9"})
     assert await adapter(h).create_container("123", {"image_url": "https://x/a.jpg", "is_carousel_item": "true"}) == "c-9"
+
+
+def test_token_hints():
+    from app.api.sources import token_hint
+    assert "Instagram Login" in token_hint("Invalid request: Request parameters are invalid: Invalid platform app", "IGAAx")
+    assert "Facebook token" in token_hint("Cannot parse access token", "EAAx")
+    assert token_hint("something else", "IGAAx") == ""

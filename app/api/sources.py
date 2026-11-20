@@ -137,6 +137,20 @@ async def list_accounts(session=Depends(get_session)):
     return [account_dict(a) for a in await session.scalars(select(Account).order_by(Account.id))]
 
 
+def token_hint(error: str, token: str) -> str:
+    """Turn Meta's cryptic token errors into the fix. Never echoes the token."""
+    if token.startswith("EAA") or "Cannot parse" in error:
+        return (" This looks like a Facebook token. Curiox needs an Instagram token (starts with IG): "
+                "Meta app → Instagram → API setup with Instagram login → Generate access tokens.")
+    if "Invalid platform app" in error:
+        return (" The app that made this token isn't set up for Instagram Login. Use a Business-type app with the "
+                "'Manage messaging & content on Instagram' use case, and generate the token under "
+                "Instagram → API setup with Instagram login (not the retired Instagram Basic Display).")
+    if "expired" in error.lower() or "Session has" in error:
+        return " The token has expired. Generate a new one in the Meta app."
+    return ""
+
+
 class AccountBody(BaseModel):
     platform: Literal["instagram"] = "instagram"
     access_token: str = Field(min_length=10)
@@ -147,7 +161,7 @@ async def connect_account(body: AccountBody, user=Depends(current_user), session
     try:
         me = await get_adapter(body.platform, body.access_token).me()
     except PlatformError as e:
-        raise HTTPException(400, f"token rejected by {body.platform}: {e}")
+        raise HTTPException(400, f"Instagram rejected the token: {e}.{token_hint(str(e), body.access_token)}")
     ext_id = str(me.get("user_id") or me.get("id"))
     a = await session.scalar(select(Account).where(Account.platform == body.platform, Account.external_user_id == ext_id))
     if a is None:
