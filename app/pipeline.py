@@ -6,6 +6,7 @@ from string import Template
 from sqlalchemy import select
 from sqlalchemy.orm import selectinload
 
+from app import prefs
 from app.config import settings
 from app.llm import LLMError
 from app.models import Approval, BrandKnowledge, CommentSuggestion, Post, audit
@@ -52,8 +53,9 @@ GENERATION_SCHEMA = _obj({
 })
 
 
-def system_prompt() -> str:
-    return (PROMPTS / "personality.txt").read_text()
+def system_prompt(voice: dict | None = None) -> str:
+    base = (PROMPTS / "personality.txt").read_text()
+    return base + "\n\n" + prefs.voice_block(voice) if voice else base
 
 
 def pick_knowledge(rows: list[BrandKnowledge], terms: list[str], limit: int = 8) -> list[BrandKnowledge]:
@@ -86,9 +88,10 @@ async def process_post(session, post_id: int, llm) -> None:
     c = post.creator
     creator_note = f"topics: {', '.join(c.topics or [])}; audience: {c.audience_note or 'n/a'}" if c else "not in curated list"
 
+    system = system_prompt((await prefs.get_settings(session))["voice"])
     try:
         # Stage A: understand the post
-        a = await llm.json(system_prompt(), render(
+        a = await llm.json(system, render(
             "analyze_post.txt", platform=post.platform, target_type=target_type,
             author=post.author_handle or "unknown", creator_note=creator_note,
             published_at=post.published_at.isoformat() if post.published_at else "unknown",
@@ -116,7 +119,7 @@ async def process_post(session, post_id: int, llm) -> None:
         # Stage C: strategy + generation
         def label(r):
             return "verified project" if r.kind == "project" and r.verified else r.kind
-        g = await llm.json(system_prompt(), render(
+        g = await llm.json(system, render(
             "generate_comment.txt", target_type=target_type, parent_block=parent_block, text=post.text,
             summary=a["post_summary"], language=post.language, tone=a["detected_tone"],
             intent=a["author_intent"], concepts=", ".join(a["technical_concepts"]) or "none",

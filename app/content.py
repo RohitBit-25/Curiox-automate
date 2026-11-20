@@ -12,7 +12,7 @@ from fastapi import HTTPException, Request
 from sqlalchemy import or_, select, update
 
 from app import craft
-from app.automation import get_settings, voice_block
+from app.prefs import get_settings, voice_block
 from app.config import settings
 from app.models import Account, BrandKnowledge, ContentItem, FunnelRule, aware, audit, now
 from app.pipeline import STR, _obj, pick_knowledge, render

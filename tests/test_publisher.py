@@ -66,3 +66,19 @@ async def test_permission_error_pauses_account(session):
     assert (await session.scalar(select(EngagementEvent))).status == "failed"
     actions = set(await session.scalars(select(AuditLog.action)))
     assert {"publish_failed", "account_paused"} <= actions
+
+
+async def test_concurrent_duplicate_event_is_audited(session):
+    """A live event with the same text already exists (e.g. another worker won the race)."""
+    from app.rules import fingerprint
+    post, approval, account = await seed(session)
+    session.add(Approval(id=2, post_id=99, decision="approved", final_text="x", actor="tester"))
+    session.add(EngagementEvent(approval_id=2, post_id=1, platform="instagram", kind="published", status="publishing",
+                                fingerprint=fingerprint("other text")))
+    await session.commit()
+    # Same approval id -> unique approval_id violation on insert, after the pre-check passed.
+    session.add(EngagementEvent(approval_id=1, post_id=1, platform="instagram", kind="published", status="failed",
+                                fingerprint="f" * 64))
+    await session.commit()
+    assert await publish(session, approval.id, FakeAdapter()) == "duplicate"
+    assert "publish_duplicate" in set(await session.scalars(select(AuditLog.action)))

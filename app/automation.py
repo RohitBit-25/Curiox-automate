@@ -1,107 +1,196 @@
-"""Automation settings (DB-backed, audited) and the brand voice block shared by every prompt."""
-from typing import Literal
+"""Comment-to-DM funnels and the auto-reply gate for comments on our own posts."""
+import random
+from datetime import timedelta
 
-from pydantic import BaseModel, Field
-from sqlalchemy import select
+from sqlalchemy import func, select
+from sqlalchemy.exc import IntegrityError
+from sqlalchemy.orm import selectinload
 
-from app.models import AppSetting, audit
+from app import craft, pipeline, workers
+from app.config import settings
+from app.models import AUTO_ACTOR, Account, Approval, FunnelRule, FunnelSend, Post, audit, aware, now
+from app.platforms import PlatformError, get_adapter
+from app.prefs import get_settings
+from app.rules import normalize
 
-DEFAULT_VOICE = {
-    "handle": "curiox.os", "who": "", "audience": "", "offer": "",
-    "pillars": [
-        {"name": "Dev & building", "description": "", "share": 30},
-        {"name": "AI & automation", "description": "", "share": 30},
-        {"name": "Fintech & trading tech", "description": "", "share": 20},
-        {"name": "Startups & small-business systems", "description": "", "share": 20},
-    ],
-    "always": [], "never": [], "examples": [], "cta_link": "", "languages": ["en"],
-    "best_times": ["Tue 19:30", "Thu 19:00", "Fri 19:30", "Sun 18:00"],
-}
-
-DEFAULTS = {
-    "mode_comments": "draft",  # off | draft | auto
-    "mode_dms": "draft",
-    "auto_min_confidence": 0.85,
-    "cap_auto_comment_replies_per_hour": 20,
-    "cap_auto_dms_per_hour": 30,
-    "cap_funnel_dms_per_hour": 60,  # API allows far more; we stay well below
-    "engagement_daily_target": 10,
-    "voice": DEFAULT_VOICE,
-}
-
-Mode = Literal["off", "draft", "auto"]
-Str = Field(default="", max_length=2000)
+COMMENT_AUTO = {"question", "support", "substance"}
+DM_AUTO = {"question", "support", "keyword"}
+DECISION_SCHEMA = pipeline._obj({
+    "bucket": {"type": "string", "enum": ["lead", "substance", "question", "support", "critic", "noise", "sensitive"]},
+    "pick": {"type": "integer"}, "safe_to_auto": pipeline.BOOL, "confidence": pipeline.NUM, "reason": pipeline.STR})
 
 
-class Pillar(BaseModel):
-    name: str = Field(min_length=1, max_length=100)
-    description: str = Str
-    share: int = Field(default=25, ge=0, le=100)
-
-
-class Voice(BaseModel):
-    handle: str = Field(default="curiox.os", max_length=100)
-    who: str = Str
-    audience: str = Str
-    offer: str = Str
-    pillars: list[Pillar] = Field(min_length=1, max_length=8)
-    always: list[str] = Field(default=[], max_length=30)
-    never: list[str] = Field(default=[], max_length=30)
-    examples: list[str] = Field(default=[], max_length=10)
-    cta_link: str = Field(default="", max_length=500)
-    languages: list[str] = Field(default=["en"], max_length=5)
-    best_times: list[str] = Field(default=[], max_length=14)
-
-
-class SettingsPatch(BaseModel):
-    mode_comments: Mode | None = None
-    mode_dms: Mode | None = None
-    auto_min_confidence: float | None = Field(None, ge=0.6, le=1.0)
-    cap_auto_comment_replies_per_hour: int | None = Field(None, ge=1, le=100)
-    cap_auto_dms_per_hour: int | None = Field(None, ge=1, le=200)
-    cap_funnel_dms_per_hour: int | None = Field(None, ge=1, le=500)
-    engagement_daily_target: int | None = Field(None, ge=3, le=30)
-    voice: Voice | None = None
-
-
-async def get_settings(session) -> dict:
-    rows = {r.key: r.value for r in await session.scalars(select(AppSetting))}
-    return {k: rows.get(k, v) for k, v in DEFAULTS.items()}
-
-
-async def save_settings(session, user: str, patch: SettingsPatch) -> dict:
-    current = await get_settings(session)
-    for key, value in patch.model_dump(exclude_none=True).items():
-        if current[key] == value:
+def match_funnel(text: str, media_id: str | None, rules: list[FunnelRule]) -> FunnelRule | None:
+    """Whole-word keyword match. Post-specific rules win over all-posts rules."""
+    words = normalize(text).split()
+    for r in sorted(rules, key=lambda r: (r.media_id is None, r.id)):
+        if not r.active or (r.media_id and r.media_id != media_id):
             continue
-        row = await session.get(AppSetting, key)
-        if row is None:
-            session.add(AppSetting(key=key, value=value, updated_by=user))
-        else:
-            row.value, row.updated_by = value, user
-        audit(session, user, "settings_changed", "settings", None, key=key, before=current[key], after=value)
+        for kw in r.keywords:
+            k = normalize(kw).split()
+            if k and any(words[i:i + len(k)] == k for i in range(len(words) - len(k) + 1)):
+                return r
+    return None
+
+
+async def run_funnel(session, post: Post, rule: FunnelRule, account: Account | None, adapter_factory=None) -> str:
+    s = await get_settings(session)
+    sent_hour = await session.scalar(select(func.count()).select_from(FunnelSend).where(
+        FunnelSend.status == "sent", FunnelSend.created_at >= now() - timedelta(hours=1)))
+    commented_at = aware(post.published_at or post.created_at)
+    reason = ("automation_paused" if settings.AUTOMATION_PAUSED else
+              "account_paused" if account is None or account.status != "active" else
+              "no_commenter" if not post.author_id or post.author_id == account.external_user_id else
+              "window_expired" if now() - commented_at > timedelta(days=7) else
+              "hourly_cap" if sent_hour >= s["cap_funnel_dms_per_hour"] else None)
+    if reason:
+        audit(session, "system", "funnel_skipped", "post", post.id, rule_id=rule.id, reason=reason)
+        await session.commit()
+        return reason
+
+    post_id, rule_id = post.id, rule.id  # rollback expires ORM objects; keep plain ids
+    send = FunnelSend(rule_id=rule_id, post_id=post_id, comment_id=post.external_id,
+                      commenter_id=post.author_id, status="sending")
+    session.add(send)
+    try:
+        await session.commit()  # the unique (rule, commenter) + comment_id constraints are the lock
+    except IntegrityError:
+        await session.rollback()
+        audit(session, "system", "funnel_duplicate", "post", post_id, rule_id=rule_id)
+        await session.commit()
+        return "duplicate"
+
+    adapter = (adapter_factory or get_adapter)(account.platform, account.access_token)
+    try:
+        send.message_id = await adapter.private_reply(account.external_user_id, post.external_id, rule.dm_text)
+    except PlatformError as e:
+        send.status, send.error = "failed", str(e)
+        audit(session, "system", "funnel_failed", "post", post.id, rule_id=rule.id, error=str(e))
+        if e.pause:
+            account.status, account.paused_reason = "paused", str(e)
+            audit(session, "system", "account_paused", "account", account.id, reason=str(e), code=e.code)
+        await session.commit()
+        return "failed"
+
+    if rule.public_replies:
+        recent = set(await session.scalars(select(FunnelSend.public_reply_text).where(
+            FunnelSend.rule_id == rule.id, FunnelSend.id != send.id).order_by(FunnelSend.id.desc()).limit(10)))
+        text = next((v for v in rule.public_replies if v not in recent), random.choice(rule.public_replies))
+        try:
+            send.public_reply_id = await adapter.reply_to_comment(post.external_id, text)
+            send.public_reply_text = text
+        except PlatformError as e:  # the DM already went; the public reply is a nice-to-have
+            send.error = f"public reply: {e}"
+    send.status = "sent"
+    post.status = "funnel"
+    audit(session, "system", "funnel_sent", "post", post.id, rule_id=rule.id, commenter_id=post.author_id)
     await session.commit()
-    return await get_settings(session)
+    return "sent"
 
 
-def voice_block(v: dict) -> str:
-    def lines(xs):
-        return "\n".join(f"- {x}" for x in xs) or "- (none set)"
-    pillars = "\n".join(f"- {p['name']} ({p.get('share', 0)}%): {p.get('description', '')}".rstrip(": ")
-                        for p in v.get("pillars", []))
-    return f"""<voice>
-Handle: @{v.get('handle') or 'curiox.os'}
-Who we are: {v.get('who') or '(not set)'}
-Audience: {v.get('audience') or '(not set)'}
-What Curiox sells: {v.get('offer') or '(not set)'}
-Pillars:
-{pillars}
-Always:
-{lines(v.get('always', []))}
-Never:
-{lines(v.get('never', []))}
-Sounds like (real examples):
-{lines(v.get('examples', []))}
-Primary link: {v.get('cta_link') or '(none)'}
-Languages: {', '.join(v.get('languages') or ['en'])}
-</voice>"""
+def auto_block_reason(*, mode, paused, account_active, bucket, allowed, safe, confidence, min_conf,
+                      needs_review, warnings, flags, tells_verdict, sent_last_hour, cap,
+                      same_target_24h, target_cap) -> str | None:
+    """Every condition must hold for an automated public reply. First failure wins."""
+    if mode != "auto":
+        return "mode_not_auto"
+    if paused:
+        return "automation_paused"
+    if not account_active:
+        return "account_paused"
+    if bucket not in allowed:
+        return f"bucket_{bucket}"
+    if not safe:
+        return "model_unsure"
+    if confidence < min_conf:
+        return "low_confidence"
+    if needs_review:
+        return "needs_human_review"
+    if warnings:
+        return "factuality_warnings"
+    if flags:
+        return "quality_flags"  # ANY quality flag, not just the hard ones
+    if tells_verdict == "FLAGGED":
+        return "ai_tells"
+    if sent_last_hour >= cap:
+        return "hourly_cap"
+    if same_target_24h >= target_cap:
+        return "target_cap"
+    return None
+
+
+async def maybe_auto_approve(session, post_id: int, llm) -> str:
+    post = await session.scalar(select(Post).options(selectinload(Post.suggestions), selectinload(Post.approval))
+                                .where(Post.id == post_id).execution_options(populate_existing=True))
+    if post is None or post.status != "pending" or not post.suggestions or post.source != "own_comment":
+        return "not_eligible"
+    s = await get_settings(session)
+    d = await llm.json(pipeline.system_prompt(s["voice"]), pipeline.render(
+        "auto_decision.txt", parent=post.parent_text or "(caption not available)", author=post.author_handle or "unknown",
+        comment=post.text, suggestions="\n".join(f"{i}. {x.text}" for i, x in enumerate(post.suggestions, 1)),
+    ), DECISION_SCHEMA, "low")
+    if d["bucket"] == "noise":
+        post.status, post.skip_reason = "skipped", "auto_noise"
+        audit(session, "system", "skip", "post", post.id, reason="auto_noise")
+        await session.commit()
+        return "noise"
+
+    pick = post.suggestions[min(max(int(d["pick"]) - 1, 0), len(post.suggestions) - 1)]
+    account = await session.get(Account, post.account_id)
+    gen = (post.analysis or {}).get("generation", {})
+    hour_ago, day_ago = now() - timedelta(hours=1), now() - timedelta(days=1)
+    sent_hour = await session.scalar(select(func.count()).select_from(Approval).where(
+        Approval.actor == AUTO_ACTOR, Approval.created_at >= hour_ago))
+    same_target = await session.scalar(select(func.count()).select_from(Approval).join(Post).where(
+        Approval.actor == AUTO_ACTOR, Approval.created_at >= day_ago, Post.author_id == post.author_id))
+    reason = auto_block_reason(
+        mode=s["mode_comments"], paused=settings.AUTOMATION_PAUSED, account_active=bool(account and account.status == "active"),
+        bucket=d["bucket"], allowed=COMMENT_AUTO, safe=d["safe_to_auto"], confidence=float(d["confidence"]),
+        min_conf=s["auto_min_confidence"], needs_review=gen.get("needs_human_review", True),
+        warnings=gen.get("factuality_warnings", []), flags=pick.quality_flags, tells_verdict=craft.ai_tells(pick.text)["verdict"],
+        sent_last_hour=sent_hour, cap=s["cap_auto_comment_replies_per_hour"], same_target_24h=same_target, target_cap=3)
+    if reason:
+        post.analysis = {**(post.analysis or {}), "auto": {**d, "blocked": reason}}
+        audit(session, "system", "auto_declined", "post", post.id, reason=reason, bucket=d["bucket"])
+        await session.commit()
+        return reason
+
+    approval = Approval(post_id=post.id, suggestion_id=pick.id, decision="approved", final_text=pick.text,
+                        actor=AUTO_ACTOR, reason=f"auto:{d['bucket']}:{float(d['confidence']):.2f}")
+    session.add(approval)
+    post.status = "approved"
+    post.analysis = {**(post.analysis or {}), "auto": {**d, "blocked": None}}
+    await session.flush()
+    audit(session, "system", "auto_approved", "post", post.id, approval_id=approval.id, reason=d["reason"])
+    await session.commit()
+    workers.enqueue_publish(approval.id)  # the publisher re-checks everything
+    return "approved"
+
+
+async def handle_comment(session, post_id: int, llm=None, adapter_factory=None) -> str:
+    """Entry point for every new post/comment: funnel -> mode -> AI pipeline -> optional auto gate."""
+    post = await session.get(Post, post_id)
+    if post is None or post.status != "new":
+        return "noop"
+    if post.source != "own_comment":  # third-party: v1 review pipeline only, never automated
+        if llm:
+            await pipeline.process_post(session, post_id, llm)
+        return "pipeline"
+    account = await session.get(Account, post.account_id)
+    rules = list(await session.scalars(select(FunnelRule).where(FunnelRule.active)))
+    if rule := match_funnel(post.text, post.parent_external_id, rules):
+        post.status = "funnel"  # claimed before the network call; never falls through to an AI reply
+        await session.commit()
+        return await run_funnel(session, post, rule, account, adapter_factory)
+    s = await get_settings(session)
+    if s["mode_comments"] == "off":
+        post.status, post.skip_reason = "skipped", "mode_off"
+        audit(session, "system", "skip", "post", post.id, reason="mode_off")
+        await session.commit()
+        return "mode_off"
+    if llm is None:
+        return "llm_not_configured"  # stays 'new'; picked up again once a key is added
+    await pipeline.process_post(session, post_id, llm)
+    if s["mode_comments"] == "auto":
+        return await maybe_auto_approve(session, post_id, llm)
+    return "queued"

@@ -9,10 +9,10 @@ from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 from sqlalchemy.pool import NullPool
 
-from app import content, pipeline, publisher
+from app import automation, content, publisher
 from app.config import settings
 from app.discovery import discover_account
-from app.llm import get_llm
+from app.llm import get_llm, llm_configured
 from app.models import Account, Post, audit
 from app.platforms import PlatformError, get_adapter
 
@@ -41,7 +41,7 @@ def run(fn, *args):
 
 @celery.task(name="process_post", autoretry_for=(Exception,), retry_backoff=True, max_retries=3)
 def process_post_task(post_id: int):
-    run(pipeline.process_post, post_id, get_llm())
+    run(automation.handle_comment, post_id, get_llm() if llm_configured() else None)
 
 
 @celery.task(name="publish")  # deliberately NO autoretry: a failed publish waits for a human
@@ -68,7 +68,10 @@ async def _discover(session):
             await _pause(session, account, e)
     # Re-enqueue posts stuck in 'new' (e.g. a lost Redis message). process_post is idempotent.
     stale = datetime.now(UTC) - timedelta(minutes=10)
-    for post_id in await session.scalars(select(Post.id).where(Post.status == "new", Post.created_at < stale)):
+    q = select(Post.id).where(Post.status == "new", Post.created_at < stale)
+    if not llm_configured():  # without an LLM only funnels can act, and those only apply to our own comments
+        q = q.where(Post.source == "own_comment")
+    for post_id in await session.scalars(q):
         enqueue_process(post_id)
 
 

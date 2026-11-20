@@ -137,7 +137,11 @@ async def connect_account(body: AccountBody, user=Depends(current_user), session
     a.status, a.paused_reason = "active", None
     a.token_expires_at = datetime.now(UTC) + timedelta(days=60)
     await session.flush()
-    audit(session, user, "account_connected", "account", a.id, handle=a.handle)
+    try:  # best effort: comments + messages webhooks for this account
+        subscribed = await get_adapter(body.platform, body.access_token).subscribe_webhooks(ext_id)
+    except PlatformError:
+        subscribed = False
+    audit(session, user, "account_connected", "account", a.id, handle=a.handle, webhooks_subscribed=subscribed)
     await session.commit()
     return account_dict(a)
 
@@ -182,3 +186,14 @@ async def add_knowledge(body: KnowledgeBody, user=Depends(current_user), session
     audit(session, user, "add_knowledge", "knowledge", k.id, title=k.title, verified=k.verified)
     await session.commit()
     return knowledge_dict(k)
+
+
+@router.get("/instagram/media")
+async def own_media(session=Depends(get_session)):
+    """Recent posts on the connected account, for the funnel post picker."""
+    from app.api.automation import require_account
+    a = await require_account(session)
+    try:
+        return await get_adapter(a.platform, a.access_token).list_own_media(25)
+    except PlatformError as e:
+        raise HTTPException(502, f"Instagram: {e}")

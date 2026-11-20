@@ -11,7 +11,7 @@ from app.models import Approval, BrandKnowledge, CommentSuggestion, EngagementEv
 from app.rules import HARD, fingerprint, quality_issues
 
 router = APIRouter()
-STATUSES = {"new", "pending", "skipped", "approved", "rejected", "published", "failed"}
+STATUSES = {"new", "pending", "skipped", "approved", "rejected", "published", "failed", "funnel"}
 
 
 def serialize(p: Post) -> dict:
@@ -26,7 +26,7 @@ def serialize(p: Post) -> dict:
         "post_summary": a.get("post_summary"), "topics": a.get("topics", []),
         "detected_tone": a.get("detected_tone"), "relevance_reason": a.get("relevance_reason"),
         "response_strategy": g.get("response_strategy"), "factuality_warnings": g.get("factuality_warnings", []),
-        "needs_human_review": g.get("needs_human_review"),
+        "needs_human_review": g.get("needs_human_review"), "auto": (p.analysis or {}).get("auto"),
         "suggestions": [{"id": s.id, "text": s.text, "strategy": s.strategy, "language": s.language,
                          "quality_flags": s.quality_flags, "edited": s.edited} for s in p.suggestions],
         "approval": {"decision": p.approval.decision, "actor": p.approval.actor, "final_text": p.approval.final_text,
@@ -57,11 +57,14 @@ async def _quality_context(session, post: Post) -> tuple[list[str], list[str]]:
 
 
 @router.get("/opportunities")
-async def list_opportunities(status: str = "pending", limit: int = 50, session=Depends(get_session)):
+async def list_opportunities(status: str = "pending", source: str | None = None, limit: int = 50,
+                             session=Depends(get_session)):
     if status not in STATUSES:
         raise HTTPException(422, f"status must be one of {sorted(STATUSES)}")
     q = (select(Post).options(*LOAD).where(Post.status == status)
          .order_by(Post.relevance_score.desc().nulls_last(), Post.created_at.desc()).limit(min(limit, 200)))
+    if source:
+        q = q.where(Post.source == source)
     return [serialize(p) for p in await session.scalars(q)]
 
 

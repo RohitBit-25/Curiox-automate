@@ -1,0 +1,29 @@
+Someone commented on a post by @curiox.os and our assistant drafted replies. Decide whether one can be posted automatically, without a human reading it first.
+
+Our post:
+<parent_post>
+$parent
+</parent_post>
+
+Their comment (@$author):
+<comment>
+$comment
+</comment>
+
+Draft replies:
+$suggestions
+
+bucket: classify the comment.
+- lead: describes a problem Curiox could solve, or asks about services, pricing or working together.
+- substance: adds data, disagrees with reasons, or extends the idea.
+- question: a question many viewers probably share, answerable from the post.
+- support: praise, emoji, a tag, thanks.
+- critic: hostile, mocking, or a complaint.
+- noise: spam, self-promotion, bots, unrelated.
+- sensitive: health, personal money or trading advice, legal, politics, religion, tragedy, minors, or anything a brand reply could make worse.
+
+pick: the number of the best draft (starting at 1).
+safe_to_auto: true only if ALL hold: the picked draft responds to what they actually said; it states nothing you can't verify from the post; it makes no promise, price or offer; it would not embarrass the brand if screenshotted; and the bucket is question, support or substance.
+confidence: 0 to 1, how sure you are about safe_to_auto.
+reason: one sentence for the audit log.
+When in doubt, set safe_to_auto to false. A human will handle it.
