@@ -20,7 +20,7 @@ class Settings(BaseSettings):
     OPENAI_COMPAT_BASE_URL: str = ""
     OPENAI_COMPAT_API_KEY: str = ""
 
-    IG_API_VERSION: str = "v26.0"
+    IG_API_VERSION: str = "v27.0"
     IG_APP_SECRET: str = ""
     IG_WEBHOOK_VERIFY_TOKEN: str = ""
 
@@ -34,6 +34,11 @@ class Settings(BaseSettings):
     THIRD_PARTY_AUTO_COMMENT: bool = False
     DISCOVERY_MODE: str = "approved_sources"
     TIMEZONE: str = "Asia/Kolkata"
+
+    PUBLIC_BASE_URL: str = ""  # https://your-host ; Meta fetches PUBLIC_BASE_URL/media/<file> when publishing
+    MEDIA_DIR: str = "./media"
+    # Emergency brake: auto replies act as drafts, funnels and scheduled publishing hold.
+    AUTOMATION_PAUSED: bool = False
 
     @property
     def dashboard_users(self) -> dict[str, str]:

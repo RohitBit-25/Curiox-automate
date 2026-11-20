@@ -9,6 +9,8 @@ os.environ.update(
     DASHBOARD_USERS="tester:t0ken",
     IG_APP_SECRET="app-secret",
     IG_WEBHOOK_VERIFY_TOKEN="verify-me",
+    # Pin everything key-dependent so a developer's shell/.env can't change test behaviour.
+    LLM_PROVIDER="anthropic", ANTHROPIC_API_KEY="", PUBLIC_BASE_URL="", AUTOMATION_PAUSED="false",
 )
 
 import pytest  # noqa: E402
@@ -51,3 +53,29 @@ class FakeAdapter:
             raise self.error
         self.replies.append((comment_id, message))
         return f"reply-{len(self.replies)}"
+
+
+H = {"Authorization": "Bearer t0ken"}
+
+
+@pytest.fixture
+async def client(session, monkeypatch):
+    """API client bound to the test session. Celery enqueues are recorded in client.queued[name]."""
+    import httpx
+
+    from app import workers
+    from app.deps import get_session
+    from app.main import app
+
+    queued: dict[str, list] = {}
+    for name in [n for n in dir(workers) if n.startswith("enqueue_")]:
+        bucket = queued.setdefault(name.removeprefix("enqueue_"), [])
+        monkeypatch.setattr(workers, name, lambda *a, _b=bucket: _b.append(a[0] if len(a) == 1 else a))
+
+    async def override():
+        yield session
+    app.dependency_overrides[get_session] = override
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://t") as c:
+        c.queued = queued
+        yield c
+    app.dependency_overrides.clear()

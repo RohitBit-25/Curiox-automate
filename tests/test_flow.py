@@ -7,14 +7,11 @@ import httpx
 import pytest
 from sqlalchemy import select, text
 
-from app import pipeline, workers
+from app import pipeline
 from app.config import Settings
-from app.deps import get_session
-from app.main import app
 from app.models import Account, AuditLog
-from tests.conftest import FakeLLM
+from tests.conftest import H, FakeLLM
 
-H = {"Authorization": "Bearer t0ken"}
 
 ANALYSIS = {
     "post_summary": "Developer replaced cron with Celery + Redis and asks about retries.",
@@ -32,21 +29,6 @@ SUGGESTIONS = [
 ]
 GENERATION = {"no_comment": False, "no_comment_reason": "", "response_strategy": "question",
               "comment_suggestions": SUGGESTIONS, "factuality_warnings": [], "needs_human_review": False}
-
-
-@pytest.fixture
-async def client(session, monkeypatch):
-    queued = {"process": [], "publish": []}
-    monkeypatch.setattr(workers, "enqueue_process", queued["process"].append)
-    monkeypatch.setattr(workers, "enqueue_publish", queued["publish"].append)
-
-    async def override():
-        yield session
-    app.dependency_overrides[get_session] = override
-    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://t") as c:
-        c.queued = queued
-        yield c
-    app.dependency_overrides.clear()
 
 
 async def submit(client, shortcode="ABC123xyz"):

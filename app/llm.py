@@ -55,6 +55,12 @@ class OpenAICompatLLM:
         return json.loads(choice["message"]["content"])
 
 
+def llm_configured() -> bool:
+    if settings.LLM_PROVIDER == "openai_compat":
+        return bool(settings.OPENAI_COMPAT_BASE_URL)
+    return bool(settings.ANTHROPIC_API_KEY)
+
+
 def get_llm() -> AnthropicLLM | OpenAICompatLLM:
     if settings.LLM_PROVIDER == "openai_compat":
         return OpenAICompatLLM(settings.OPENAI_COMPAT_BASE_URL, settings.OPENAI_COMPAT_API_KEY, settings.LLM_MODEL)

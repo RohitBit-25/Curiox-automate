@@ -3,7 +3,7 @@ import logging
 from fastapi import Depends, FastAPI
 from sqlalchemy import select
 
-from app.api import analytics, opportunities, sources, webhooks
+from app.api import analytics, automation, opportunities, sources, webhooks
 from app.config import settings
 from app.deps import current_user, get_session
 from app.models import AuditLog
@@ -12,7 +12,7 @@ logging.getLogger("httpx").setLevel(logging.WARNING)  # httpx logs full URLs, wh
 
 app = FastAPI(title="Curiox Growth Engine")
 auth = [Depends(current_user)]
-for r in (opportunities.router, sources.router, analytics.router):
+for r in (opportunities.router, sources.router, analytics.router, automation.router):
     app.include_router(r, prefix="/api", dependencies=auth)
 app.include_router(webhooks.router, prefix="/api")  # HMAC-authenticated
 
