@@ -10,3 +10,5 @@ __pycache__/
 dashboard/dist/
 *.db
 .playwright-mcp/
+logs/
+media/
