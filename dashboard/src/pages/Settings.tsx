@@ -52,7 +52,7 @@ function Integrations() {
         ))}
         <div className="item stack" style={{ gap: 6 }}>
           <b className="small">Meta app setup</b>
-          <p className="xs muted">Permissions: instagram_business_basic, instagram_business_manage_comments, instagram_business_content_publish, instagram_business_manage_messages, instagram_business_manage_insights. Subscribe the webhook to <b>comments</b> and <b>messages</b>. The app must be Live with Advanced Access for comment webhooks.</p>
+          <p className="xs muted">In the Meta app: Use cases → Instagram API → <b>API setup with Unified login</b>. Permissions: instagram_basic, instagram_manage_comments, instagram_content_publish, instagram_manage_messages, instagram_manage_insights. Webhooks: subscribe to <b>comments</b> and <b>messages</b>. IG_APP_SECRET is the Meta app secret (App settings → Basic).</p>
           <div className="row"><code className="small">{webhook}</code><CopyButton text={webhook} label="Copy webhook URL" /></div>
         </div>
       </div>

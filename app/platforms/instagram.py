@@ -1,6 +1,11 @@
-"""Instagram API with Instagram Login (graph.instagram.com). Own-account media and comments only.
+"""Instagram API: own-account media, comments, publishing, insights, messaging.
 
-Scopes: instagram_business_basic, _manage_comments, _content_publish, _manage_messages, _manage_insights.
+Two login flavours, picked from the token (paths are otherwise identical, keyed by the IG account id):
+- Unified Login (all new Meta apps): system-user token "EAA...", host graph.facebook.com,
+  account id from /me/assigned_instagram_accounts. Scopes: instagram_basic, instagram_manage_comments,
+  instagram_content_publish, instagram_manage_messages, instagram_manage_insights.
+- Instagram Login (older apps): Instagram user token "IG...", host graph.instagram.com, account id from /me.
+
 There is deliberately no method to comment on third-party media, follow accounts, or message anyone who
 hasn't messaged/commented first: those actions don't exist in this adapter.
 """
@@ -11,7 +16,8 @@ import httpx
 from app.config import settings
 from app.platforms.base import PlatformError, RemoteItem
 
-HOST = "https://graph.instagram.com"
+HOST = "https://graph.instagram.com"  # Instagram Login
+FB_HOST = "https://graph.facebook.com"  # Unified Login
 # Auth/permission/rate/policy errors: pause the account instead of retrying.
 PAUSE_CODES = {3, 10, 190, 368} | set(range(200, 300))
 # Messaging: only a dead token pauses the account; "outside window" / "already replied" fail just that send.
@@ -24,7 +30,15 @@ class InstagramAdapter:
     def __init__(self, token: str, client: httpx.AsyncClient | None = None):
         self.token = token
         self.client = client or httpx.AsyncClient()
-        self.base = f"{HOST}/{settings.IG_API_VERSION}"
+        self.unified = not token.startswith("IG")
+        self.base = f"{FB_HOST if self.unified else HOST}/{settings.IG_API_VERSION}"
+        self._ig_id: str | None = None
+
+    async def ig_id(self) -> str:
+        """The Instagram professional account id all paths are keyed by."""
+        if self._ig_id is None:
+            self._ig_id = str((await self.me())["user_id"])
+        return self._ig_id
 
     async def _call(self, method: str, url: str, pause_codes: set = PAUSE_CODES, **kw) -> dict:
         kw.setdefault("params", {})["access_token"] = self.token
@@ -38,11 +52,25 @@ class InstagramAdapter:
         return r.json()
 
     async def me(self) -> dict:
-        return await self._call("GET", f"{self.base}/me",
-                                params={"fields": "user_id,username,followers_count,media_count"})
+        """{user_id, username, followers_count, media_count} for the connected account."""
+        if not self.unified:
+            return await self._call("GET", f"{self.base}/me",
+                                    params={"fields": "user_id,username,followers_count,media_count"})
+        # Unified: /me is the system user; the IG account is an assigned asset.
+        accounts = (await self._call("GET", f"{self.base}/me/assigned_instagram_accounts",
+                                     params={"fields": "id,username"})).get("data", [])
+        if not accounts:
+            raise PlatformError("No Instagram account is assigned to this token. Add the account to the "
+                                "configuration (or tester role) and generate the token again.", 100)
+        acct = accounts[0]  # ponytail: first assigned account; Curiox runs one account
+        self._ig_id = str(acct["id"])
+        info = await self._call("GET", f"{self.base}/{self._ig_id}",
+                                params={"fields": "username,followers_count,media_count"})
+        return {"user_id": self._ig_id, "username": info.get("username", acct.get("username")),
+                "followers_count": info.get("followers_count"), "media_count": info.get("media_count")}
 
     async def list_own_media(self, limit: int = 10) -> list[dict]:
-        j = await self._call("GET", f"{self.base}/me/media", params={
+        j = await self._call("GET", f"{self.base}/{await self.ig_id()}/media", params={
             "fields": "id,caption,permalink,timestamp,comments_count,media_type,media_product_type,"
                       "thumbnail_url,media_url", "limit": limit})
         return j.get("data", [])
@@ -62,6 +90,10 @@ class InstagramAdapter:
         return j["id"]
 
     async def refresh_token(self) -> tuple[str, int]:
+        if self.unified:
+            # ponytail: system-user token lifetime is set in the Meta configuration ("Never" recommended);
+            # no refresh endpoint for it here. If it expires, calls fail with 190 and the account pauses.
+            return self.token, 365 * 86400
         j = await self._call("GET", f"{HOST}/refresh_access_token", params={"grant_type": "ig_refresh_token"})
         return j["access_token"], int(j["expires_in"])
 

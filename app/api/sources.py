@@ -139,15 +139,15 @@ async def list_accounts(session=Depends(get_session)):
 
 def token_hint(error: str, token: str) -> str:
     """Turn Meta's cryptic token errors into the fix. Never echoes the token."""
-    if token.startswith("EAA") or "Cannot parse" in error:
-        return (" This looks like a Facebook token. Curiox needs an Instagram token (starts with IG): "
-                "Meta app → Instagram → API setup with Instagram login → Generate access tokens.")
     if "Invalid platform app" in error:
-        return (" The app that made this token isn't set up for Instagram Login. Use a Business-type app with the "
-                "'Manage messaging & content on Instagram' use case, and generate the token under "
-                "Instagram → API setup with Instagram login (not the retired Instagram Basic Display).")
+        return (" This token is from Instagram Login, which this Meta app doesn't support. New apps use "
+                "Unified login: Use cases → Instagram API → API setup with Unified login → Generate access tokens.")
+    if "assigned" in error:
+        return " Make @curiox.os an Instagram tester on the app (App roles → Roles), accept the invite, regenerate."
     if "expired" in error.lower() or "Session has" in error:
         return " The token has expired. Generate a new one in the Meta app."
+    if "Cannot parse" in error or "decrypt" in error.lower():
+        return " The token looks incomplete. Copy it again in full from the Meta dashboard."
     return ""
 
 
