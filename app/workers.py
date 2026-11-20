@@ -40,7 +40,12 @@ def run(fn, *args):
     return asyncio.run(go())
 
 
-@celery.task(name="process_post", autoretry_for=(Exception,), retry_backoff=True, max_retries=3)
+# Network blips (Wi-Fi/DNS drops) can last a minute: back off 15s, 30s, 60s, 120s, 240s, no jitter to ~0s.
+# The LLM call happens before any DB write in these tasks, so a retry never duplicates work.
+RETRY = dict(autoretry_for=(Exception,), retry_backoff=15, retry_backoff_max=600, retry_jitter=False, max_retries=5)
+
+
+@celery.task(name="process_post", **RETRY)
 def process_post_task(post_id: int):
     run(automation.handle_comment, post_id, get_llm() if llm_configured() else None)
 
@@ -116,13 +121,13 @@ def weekly_report_task():
     run(_weekly_report)
 
 
-@celery.task(name="plan_week", autoretry_for=(Exception,), retry_backoff=True, max_retries=2)
+@celery.task(name="plan_week", **RETRY)
 def plan_week_task(week_start_iso: str, brief: str, count: int, user: str):
     for item_id in run(content.plan_week, date.fromisoformat(week_start_iso), brief, count, user, get_llm()):
         enqueue_draft(item_id)
 
 
-@celery.task(name="draft_item", autoretry_for=(Exception,), retry_backoff=True, max_retries=3)
+@celery.task(name="draft_item", **RETRY)
 def draft_item_task(item_id: int):
     run(content.draft_item, item_id, get_llm())
 
@@ -132,7 +137,7 @@ def publish_due_task():
     return run(content.publish_tick)
 
 
-@celery.task(name="dm_reply", autoretry_for=(Exception,), retry_backoff=True, max_retries=2)
+@celery.task(name="dm_reply", **RETRY)
 def dm_reply_task(conv_id: int):
     run(inbox.draft_dm_reply, conv_id, get_llm() if llm_configured() else None)
 
