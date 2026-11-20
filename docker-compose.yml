@@ -1,0 +1,48 @@
+x-app: &app
+  build: .
+  env_file: .env
+  restart: unless-stopped
+  depends_on:
+    postgres: { condition: service_healthy }
+    redis: { condition: service_started }
+
+services:
+  api:
+    <<: *app
+    command: sh -c "alembic upgrade head && uvicorn app.main:app --host 0.0.0.0 --port 8000"
+    ports: ["127.0.0.1:8000:8000"]
+
+  worker:
+    <<: *app
+    command: celery -A app.workers worker -l info --concurrency 2
+
+  beat:
+    <<: *app
+    command: celery -A app.workers beat -l info --schedule /tmp/celerybeat-schedule
+
+  postgres:
+    image: postgres:17-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: curiox
+      POSTGRES_USER: curiox
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-curiox}
+    volumes: [pgdata:/var/lib/postgresql/data]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U curiox"]
+      interval: 5s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+
+  dashboard:
+    build: ./dashboard
+    restart: unless-stopped
+    environment: { API_URL: "http://api:8000" }
+    ports: ["127.0.0.1:5173:5173"]
+    depends_on: [api]
+
+volumes:
+  pgdata:
