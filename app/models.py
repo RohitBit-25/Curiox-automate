@@ -33,8 +33,20 @@ class EncryptedText(TypeDecorator):
         return None if value is None else _fernet().decrypt(value.encode()).decode()
 
 
+class UTCDateTime(TypeDecorator):
+    """Always UTC-aware in Python. Postgres does this natively; SQLite drops tzinfo, so normalise both ways."""
+    impl = DateTime(timezone=True)
+    cache_ok = True
+
+    def process_bind_param(self, value, dialect):
+        return value.astimezone(UTC) if value is not None and value.tzinfo else value
+
+    def process_result_value(self, value, dialect):
+        return value.replace(tzinfo=UTC) if value is not None and value.tzinfo is None else value
+
+
 class Base(DeclarativeBase):
-    type_annotation_map = {datetime: DateTime(timezone=True), date: Date}
+    type_annotation_map = {datetime: UTCDateTime, date: Date}
 
 
 class Account(Base):

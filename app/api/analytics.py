@@ -163,7 +163,7 @@ async def today(session=Depends(get_session)):
     approved_waiting = await session.scalar(select(func.count()).select_from(ContentItem).where(
         ContentItem.status == "approved"))
     scheduled = list(await session.scalars(select(ContentItem).where(
-        ContentItem.scheduled_at.is_not(None), ContentItem.scheduled_at <= t + timedelta(hours=48),
+        ContentItem.scheduled_at >= t - timedelta(hours=6), ContentItem.scheduled_at <= t + timedelta(hours=48),
         ContentItem.status.in_(["idea", "drafted", "approved", "processing", "publishing"]))
         .order_by(ContentItem.scheduled_at)))
     failed = list(await session.scalars(select(ContentItem).where(ContentItem.status == "failed")))

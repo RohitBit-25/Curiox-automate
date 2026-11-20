@@ -157,3 +157,12 @@ async def test_carousel_children(session, monkeypatch):
     ticked = await c.publish_tick(session, fake)
     assert ticked == {item_id: "published"}
     assert (await session.scalar(select(ContentItem.status))) == "published"
+
+
+async def test_datetimes_roundtrip_as_utc(client):
+    """An IST input must be stored as the same instant and come back explicitly UTC (SQLite drops tzinfo)."""
+    item = (await client.post("/api/content", headers=H, json={
+        "format": "reel", "pillar": "x", "scheduled_at": "2026-11-24T19:30:00+05:30"})).json()
+    got = (await client.get(f"/api/content/{item['id']}", headers=H)).json()["scheduled_at"]
+    assert datetime.fromisoformat(got) == datetime(2026, 11, 24, 14, 0, tzinfo=UTC)
+    assert got.endswith(("Z", "+00:00"))
