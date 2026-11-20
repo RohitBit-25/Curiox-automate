@@ -16,9 +16,10 @@ PROMPTS = Path(__file__).parent.parent / "prompts"
 STRATEGIES = ["insight", "question", "experience", "discussion", "appreciation"]
 
 
-def render(name: str, **kw) -> str:
+def render(template: str, /, **kw) -> str:
+    # Positional-only so prompts can use any variable name (e.g. $name).
     # string.Template: user content with braces or $ is never re-interpreted.
-    return Template((PROMPTS / name).read_text()).safe_substitute(kw)
+    return Template((PROMPTS / template).read_text()).safe_substitute(kw)
 
 
 def _obj(props: dict) -> dict:

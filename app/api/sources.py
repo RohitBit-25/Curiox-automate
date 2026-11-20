@@ -82,7 +82,8 @@ class CreatorBody(BaseModel):
 
 def creator_dict(c: Creator) -> dict:
     return {"id": c.id, "platform": c.platform, "handle": c.handle, "display_name": c.display_name,
-            "topics": c.topics, "audience_note": c.audience_note, "active": c.active}
+            "topics": c.topics, "audience_note": c.audience_note, "active": c.active,
+            "last_engaged_at": c.last_engaged_at}
 
 
 @router.get("/creators")
@@ -101,6 +102,26 @@ async def add_creator(body: CreatorBody, user=Depends(current_user), session=Dep
         await session.rollback()
         raise HTTPException(409, "creator already exists")
     audit(session, user, "add_creator", "creator", c.id, handle=c.handle)
+    await session.commit()
+    return creator_dict(c)
+
+
+class CreatorPatch(BaseModel):
+    active: bool | None = None
+    display_name: str | None = None
+    topics: list[str] | None = None
+    audience_note: str | None = None
+
+
+@router.patch("/creators/{creator_id}")
+async def patch_creator(creator_id: int, body: CreatorPatch, user=Depends(current_user), session=Depends(get_session)):
+    c = await session.get(Creator, creator_id)
+    if c is None:
+        raise HTTPException(404, "creator not found")
+    changes = body.model_dump(exclude_unset=True)
+    for k, v in changes.items():
+        setattr(c, k, v)
+    audit(session, user, "creator_edited", "creator", c.id, fields=sorted(changes))
     await session.commit()
     return creator_dict(c)
 

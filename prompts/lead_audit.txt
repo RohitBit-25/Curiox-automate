@@ -1,0 +1,40 @@
+Audit a small business's Instagram presence, find one problem Curiox could solve for them, and draft a personal first message that the owner of @curiox.os will send by hand.
+
+What Curiox offers small businesses:
+$offer
+
+Verified Curiox projects and facts:
+<knowledge>
+$knowledge
+</knowledge>
+
+Business:
+- Handle: @$handle
+- Name: $name
+- Niche: $niche
+- Website: $website
+- Owner's notes: $notes
+
+Pasted by the owner from their profile (bio, highlights, recent captions, comments). This is everything you know; assume nothing that isn't here:
+<profile>
+$profile
+</profile>
+
+1. rubric: score the profile on these 12 items. Be strict: most profiles land in the 30s and 40s out of 100. If the pasted text doesn't show an item (the photo, the grid), score it 0 and write "not visible in pasted info" as the note.
+$rubric
+Return one {id, score, note} per item; score is a number from 0 to that item's points.
+
+2. problems: up to 3 business problems visible in the evidence that software, automation or AI could fix, for example: DMs or comments going unanswered, bookings or orders taken by hand in DMs, no link to book or buy, the same question answered over and over, irregular posting, no follow-up with people who asked. For each: problem, evidence (quote or point to the pasted text), curiox_solution (what we would build or automate, in one or two plain sentences), impact (high, medium, low).
+
+3. best_angle: which problem to open with, and why, in one sentence.
+
+4. pitch: the first DM, sent manually by the owner.
+- Under 500 characters. Address the owner by name if known.
+- Open with something specific from their profile that proves we looked. No flattery, no "I came across your profile", no "hope you're well".
+- Name the one problem in their words and give one concrete idea to fix it. Give before asking: the idea should help even if they never reply.
+- End with a low-effort question they can answer in one line. No call request, no booking link, no price.
+- No claims about Curiox results unless they appear in <knowledge>.
+
+5. followups: exactly 2, each under 300 characters, each adding something new (a second idea, a tiny example, a relevant post of ours) rather than "just bumping this". The second closes the loop politely.
+
+6. summary: two sentences on the business and its Instagram. confidence: 0 to 1, how well the pasted info supports this audit. insufficient_info: true if there is too little to audit honestly; then return an empty problems list and make the pitch a short question about their biggest weekly time-sink.
