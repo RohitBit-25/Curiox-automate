@@ -1,0 +1,38 @@
+Draft one $format for @curiox.os.
+
+Pillar: $pillar
+Type: $post_type
+Goal: $goal
+Angle: $angle
+Suggested hook formula: $hook_formula
+Language: $language
+
+<brief>
+$brief
+</brief>
+
+<knowledge>
+$knowledge
+</knowledge>
+
+Active comment-to-DM keywords: $funnels
+
+Hook formulas (id. name: template):
+$hooks
+
+$format_block
+
+Caption (all formats except story):
+- About 125 characters show before "more". They must work alone: lead with the payoff, the tension, or the number. No greeting, no hashtag or mention on the first line, no "In this post".
+- One idea. Short paragraphs separated by line breaks. 0 to 3 emoji, each placed on purpose.
+- End on a landing: a specific question, a reason to save or send that names who it's for, or "comment KEYWORD" only for an active keyword. Never "What do you think?". Exactly one ask.
+- Captions aren't clickable, so include no URLs.
+- Reel: 1 to 4 short lines. Carousel: short, the slides carry the post. Image: can run longer (up to about 1,200 characters) if it teaches or tells a story.
+- Don't put hashtags in the caption; return them separately.
+
+Hashtags: 3 to 5 that describe exactly this post, each with a tier. niche: only people in this exact world would type it (roughly under 50k posts). mid: a recognizable sub-topic (roughly 50k to 500k). broad: one common word. Use 2-3 niche, 1-2 mid, at most 1 broad. No generic tags (#viral, #fyp, #explore, #instagood, #reels, #follow). You can't see real post counts, so size them by judgment. Story: empty list.
+
+Return:
+- hooks: 5 options using different formulas. spoken: the first line said aloud (or the caption's first line for carousel and image), 5 to 12 words, the payload word within the first three words, aimed at "you" where natural. on_screen: the blunter version, 6 words or fewer. formula: the formula name or "none".
+- caption, hashtags (tag without "#", plus tier), cta (the one ask, as written), notes (what the human must fill in or verify, such as [NUMBER] placeholders; empty string if nothing).
+- beats, slides, frames: fill the one this format uses as described above, and return empty lists for the other two.

@@ -1,7 +1,7 @@
 """Celery app, beat schedule, tasks. `celery -A app.workers worker|beat`."""
 import asyncio
 import logging
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, date, datetime, timedelta
 
 from celery import Celery
 from celery.schedules import crontab
@@ -9,7 +9,7 @@ from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 from sqlalchemy.pool import NullPool
 
-from app import pipeline, publisher
+from app import content, pipeline, publisher
 from app.config import settings
 from app.discovery import discover_account
 from app.llm import get_llm
@@ -24,6 +24,7 @@ celery.conf.beat_schedule = {
     "discover": {"task": "discover", "schedule": crontab(minute="*/30")},
     "refresh_tokens": {"task": "refresh_tokens", "schedule": crontab(hour=3, minute=0)},
     "weekly_report": {"task": "weekly_report", "schedule": crontab(day_of_week="mon", hour=9, minute=0)},
+    "publish_due": {"task": "publish_due", "schedule": crontab()},  # every minute
 }
 
 # asyncio.run makes a new loop per task, so pooled connections can't be shared across tasks.
@@ -107,6 +108,30 @@ def refresh_tokens_task():
 @celery.task(name="weekly_report")
 def weekly_report_task():
     run(_weekly_report)
+
+
+@celery.task(name="plan_week", autoretry_for=(Exception,), retry_backoff=True, max_retries=2)
+def plan_week_task(week_start_iso: str, brief: str, count: int, user: str):
+    for item_id in run(content.plan_week, date.fromisoformat(week_start_iso), brief, count, user, get_llm()):
+        enqueue_draft(item_id)
+
+
+@celery.task(name="draft_item", autoretry_for=(Exception,), retry_backoff=True, max_retries=3)
+def draft_item_task(item_id: int):
+    run(content.draft_item, item_id, get_llm())
+
+
+@celery.task(name="publish_due")  # NO autoretry: the next tick (one minute later) is the retry
+def publish_due_task():
+    return run(content.publish_tick)
+
+
+def enqueue_plan(week_start_iso: str, brief: str, count: int, user: str) -> None:
+    plan_week_task.delay(week_start_iso, brief, count, user)
+
+
+def enqueue_draft(item_id: int) -> None:
+    draft_item_task.delay(item_id)
 
 
 def enqueue_process(post_id: int) -> None:

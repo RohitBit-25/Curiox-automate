@@ -1,0 +1,35 @@
+Plan Instagram posts for @curiox.os for the week of $week_start (Monday) to $week_end.
+
+<brief>
+$brief
+</brief>
+The brief is what actually happened this week: things built, numbers, client calls, mistakes, arguments. Posts come from here. If the brief is empty or thin, plan teach and opinion posts from the pillars and say in "why" which real detail the owner must add.
+
+Pillars and target share of posts:
+$pillars
+
+Preferred posting windows (local time, $timezone):
+$best_times
+
+Planned or published in the last two weeks. Do not repeat these angles:
+<history>
+$history
+</history>
+
+What performed best recently (reach, saves, shares), if known:
+$performance
+
+Hook formulas (id. name: template):
+$hooks
+
+Active comment-to-DM keywords (a post may end with "comment KEYWORD" only for these): $funnels
+
+Plan exactly $count posts:
+- At least $min_reels are reels: reels are the format that reaches people who don't follow us yet. Carousels go deep with followers. Use image for one strong statement or proof. Use story at most once, for behind-the-scenes.
+- Mix types and never put the same type on consecutive days: proof (something that happened, with a number), teach (one thing the viewer can do today), opinion (a position some people will disagree with), story (a scene with a cost), offer (what Curiox does for small businesses, said plainly; at most one this week).
+- Give each post one goal: saves (lists, frameworks, how-tos), shares (relatable truths, myth-busting, contrarian takes someone sends to a friend), comments (a specific question, or an active keyword), follows (a payoff that proves the account is worth following).
+- An angle is not a topic. "AI agents" is a topic. "The Zapier flow that double-charged a client 14 times, and the one-line idempotency fix" is an angle.
+- Spread posts across the week and use the preferred windows.
+
+For each post return: date (YYYY-MM-DD within the week), time (HH:MM, 24-hour, local), format, pillar (exactly one of the pillar names), type, angle (one or two specific sentences), hook_formula (a formula name from the list, or "none"), goal, why (one sentence: why this angle, this week, for this audience).
+Also return engagement_note: one or two sentences on which conversations to join this week to support these posts.

@@ -1,20 +1,32 @@
 import logging
+from pathlib import Path
 
-from fastapi import Depends, FastAPI
+from fastapi import Depends, FastAPI, HTTPException
+from fastapi.responses import FileResponse
 from sqlalchemy import select
 
-from app.api import analytics, automation, opportunities, sources, webhooks
+from app.api import analytics, automation, content, opportunities, sources, webhooks
 from app.config import settings
+from app.content import MEDIA_NAME
 from app.deps import current_user, get_session
 from app.models import AuditLog
 
 logging.getLogger("httpx").setLevel(logging.WARNING)  # httpx logs full URLs, which carry access_token
 
-app = FastAPI(title="Curiox Growth Engine")
+app = FastAPI(title="Curiox OS")
 auth = [Depends(current_user)]
-for r in (opportunities.router, sources.router, analytics.router, automation.router):
+for r in (opportunities.router, sources.router, analytics.router, automation.router, content.router):
     app.include_router(r, prefix="/api", dependencies=auth)
 app.include_router(webhooks.router, prefix="/api")  # HMAC-authenticated
+
+
+@app.get("/media/{name}")
+async def media(name: str):
+    """Public on purpose: Meta fetches uploads from here when publishing. Names are 128-bit random."""
+    path = Path(settings.MEDIA_DIR) / name
+    if not MEDIA_NAME.match(name) or not path.is_file():
+        raise HTTPException(404)
+    return FileResponse(path)
 
 
 @app.get("/health")
