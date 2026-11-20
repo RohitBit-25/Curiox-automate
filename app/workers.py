@@ -9,7 +9,7 @@ from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 from sqlalchemy.pool import NullPool
 
-from app import automation, content, inbox, publisher
+from app import automation, content, inbox, insights, publisher
 from app.config import settings
 from app.discovery import discover_account
 from app.llm import get_llm, llm_configured
@@ -25,6 +25,7 @@ celery.conf.beat_schedule = {
     "refresh_tokens": {"task": "refresh_tokens", "schedule": crontab(hour=3, minute=0)},
     "weekly_report": {"task": "weekly_report", "schedule": crontab(day_of_week="mon", hour=9, minute=0)},
     "publish_due": {"task": "publish_due", "schedule": crontab()},  # every minute
+    "insights_daily": {"task": "insights_daily", "schedule": crontab(hour=6, minute=15)},
 }
 
 # asyncio.run makes a new loop per task, so pooled connections can't be shared across tasks.
@@ -137,6 +138,11 @@ def dm_reply_task(conv_id: int):
 @celery.task(name="send_dm")  # NO autoretry: a failed send waits for a human
 def send_dm_task(message_id: int):
     return run(inbox.send_dm, message_id)
+
+
+@celery.task(name="insights_daily")
+def insights_daily_task():
+    run(insights.insights_daily)
 
 
 def enqueue_dm(conv_id: int) -> None:
