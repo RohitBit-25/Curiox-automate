@@ -60,13 +60,15 @@ async def _pause(session, account: Account, e: PlatformError):
 
 
 async def _discover(session):
-    for account in await session.scalars(select(Account).where(Account.status == "active")):
+    # Iterate ids, not ORM rows: a rollback expires loaded objects and async sessions can't lazy-reload.
+    for account_id in list(await session.scalars(select(Account.id).where(Account.status == "active"))):
+        account = await session.get(Account, account_id)
         try:
             for post_id in await discover_account(session, account, get_adapter(account.platform, account.access_token)):
                 enqueue_process(post_id)
         except PlatformError as e:
             await session.rollback()
-            await _pause(session, account, e)
+            await _pause(session, await session.get(Account, account_id, populate_existing=True), e)
     # Re-enqueue posts stuck in 'new' (e.g. a lost Redis message). process_post is idempotent.
     stale = datetime.now(UTC) - timedelta(minutes=10)
     q = select(Post.id).where(Post.status == "new", Post.created_at < stale)

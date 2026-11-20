@@ -63,3 +63,12 @@ async def test_content_analytics_er(client, session):
     body = (await client.get("/api/analytics/content", headers=H)).json()
     assert body["items"][0]["er"] == 0.1 and body["by_pillar"][0] == {"key": "Dev", "posts": 1, "avg_reach": 200,
                                                                        "avg_er": 0.1}
+
+
+async def test_insights_daily_survives_permission_error(session):
+    """A missing insights permission must be logged and skipped, not crash the nightly job."""
+    await account(session)
+    fake = FakeAdapter(errors={"account_insights": PlatformError("(#10) Application does not have permission", 10)})
+    await insights.insights_daily(session, adapter_factory=fake)
+    assert await session.scalar(select(func.count()).select_from(AccountSnapshot)) == 0
+    assert (await session.get(Account, 1)).status == "active"

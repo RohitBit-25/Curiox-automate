@@ -64,11 +64,13 @@ async def media_insights(session, account: Account, adapter) -> int:
 
 async def insights_daily(session, adapter_factory=None) -> None:
     from app.growth import local_today
-    for account in list(await session.scalars(select(Account).where(Account.status == "active"))):
+    # Iterate ids, not ORM rows: a rollback expires loaded objects and async sessions can't lazy-reload.
+    for account_id in list(await session.scalars(select(Account.id).where(Account.status == "active"))):
+        account = await session.get(Account, account_id, populate_existing=True)
         adapter = (adapter_factory or get_adapter)(account.platform, account.access_token)
         try:
             await snapshot_account(session, account, adapter, local_today())
             await media_insights(session, account, adapter)
         except PlatformError as e:
             await session.rollback()
-            log.warning("insights failed for account %s: %s", account.id, e)
+            log.warning("insights failed for account %s: %s", account_id, e)

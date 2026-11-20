@@ -142,3 +142,18 @@ async def test_mode_off_and_no_llm(session):
     post = await seed(session, text="nice video")
     assert await auto.handle_comment(session, post.id) == "mode_off"
     assert (await session.get(Post, post.id)).skip_reason == "mode_off"
+
+
+async def test_discover_pauses_on_dead_token_without_crashing(session, monkeypatch):
+    from app import workers
+    session.add(Account(id=1, platform="instagram", handle="curiox.os", external_user_id="17841", access_token="t" * 12))
+    await session.commit()
+
+    class Dead(FakeAdapter):
+        async def list_own_media(self, limit=10):
+            raise workers.PlatformError("token expired", 190, pause=True)
+    monkeypatch.setattr(workers, "get_adapter", lambda platform, token: Dead())
+    monkeypatch.setattr(workers, "enqueue_process", lambda _: None)
+    await workers._discover(session)
+    acct = await session.get(Account, 1, populate_existing=True)
+    assert acct.status == "paused" and "expired" in acct.paused_reason
