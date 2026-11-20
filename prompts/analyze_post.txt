@@ -1,0 +1,35 @@
+Analyze this item for Curiox's engagement review queue. Do not write a comment yet.
+
+Platform: $platform
+Item type: $target_type
+Author: $author
+Curated creator: $creator_note
+Posted at: $published_at
+Heuristic language guess: $language_hint
+
+$parent_block
+<post>
+$text
+</post>
+
+Return:
+- post_summary: one or two sentences on what the author is actually saying.
+- detected_language: en, hi, hinglish, or other. Hinglish means Hindi written in Roman script, usually mixed with English.
+- detected_tone: a few words, for example "excited, technical", "frustrated", "teaching".
+- author_intent: what the author wants: teach, share a win, ask for help, start a debate, promote, entertain, or similar.
+- topics: 1 to 5 short topic labels.
+- technical_concepts: specific tools, techniques, or concepts mentioned. Empty list if none.
+- invites_discussion: true if the item asks for or naturally opens a conversation.
+- scores, each a number from 0.0 to 1.0:
+  - topic: fit with Curiox topics (software development, AI/automation, fintech/trading tech, startups, tech creators). Off-topic is 0.
+  - audience: how likely the readers are developers, builders, traders, founders, or tech creators.
+  - conversation: how much room there is for a reply that adds something real.
+  - quality: substance and care in the item itself. Low-effort, recycled, or clickbait content scores low.
+- reject_reason: exactly one of
+  none, giveaway, engagement_bait (e.g. "comment YES", "tag 3 friends", "drop a 🔥"), irrelevant_promo,
+  sensitive (politics, religion, tragedy, health crises, personal hardship, specific stock or trade tips to individuals, or anything where a brand reply would be unwelcome),
+  no_value (nothing meaningful could be added), spam.
+  Use none when the item is fine.
+- relevance_reason: one sentence explaining the scores to the human reviewer.
+
+Be strict. Most items should not get a brand comment.

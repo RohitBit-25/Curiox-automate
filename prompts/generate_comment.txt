@@ -1,0 +1,36 @@
+Write comment suggestions for this $target_type.
+
+$parent_block
+<post>
+$text
+</post>
+
+Analysis:
+- Summary: $summary
+- Language: $language
+- Tone: $tone
+- Author intent: $intent
+- Technical concepts: $concepts
+
+Curiox knowledge you may draw on. Only entries marked [verified project] may be described as Curiox's own experience:
+<knowledge>
+$knowledge
+</knowledge>
+
+Comments Curiox posted recently. Do not reuse their wording, openings, or structure:
+<recent>
+$recent
+</recent>
+
+Choose the single best response_strategy:
+- insight: add a specific technical point, trade-off, edge case, or fact the post did not cover.
+- question: ask one precise question whose answer would help the author or the readers.
+- experience: share what Curiox learned on a verified project listed above, naming that project. Use only if a listed verified project is directly relevant.
+- discussion: offer a respectful, reasoned counterpoint or alternative approach.
+- appreciation: name exactly what was well done and why it matters. Use only when the post is strong and nothing else fits.
+If this is a comment on Curiox's own post, reply to that person directly: answer their question or engage with their point, warmly and helpfully.
+
+Write up to 3 comment_suggestions in $language. Each must take a different angle or structure, follow every Curiox rule, and stand on its own. Give each item its text and its strategy.
+factuality_warnings: list any claim in your suggestions that the reviewer should double-check (versions, numbers, API behaviour). Empty list if none.
+needs_human_review: true if anything is uncertain, sensitive, or depends on facts you cannot confirm.
+If no comment would add real value, set no_comment to true, explain in no_comment_reason, and return an empty comment_suggestions list. Otherwise set no_comment to false and no_comment_reason to an empty string.
