@@ -53,8 +53,10 @@ Open http://localhost:5173, go to **Settings**, and paste your dashboard token. 
 | Meta app secret + verify token | `IG_APP_SECRET`, `IG_WEBHOOK_VERIFY_TOKEN` | Real-time comments and DMs (webhooks) |
 | Public https URL | `PUBLIC_BASE_URL` | Publishing (Instagram fetches media from `/media/…`) |
 
-**Meta app (Instagram API with Instagram Login):**
-- Permissions: `instagram_business_basic`, `instagram_business_manage_comments`, `instagram_business_content_publish`, `instagram_business_manage_messages`, `instagram_business_manage_insights`.
+**Meta app (new apps use Instagram API with Unified Login; older Instagram-Login tokens still work):**
+- Token: Use cases → Instagram API → API setup with Unified login → Generate access tokens (add @curiox.os as an Instagram tester first). It starts with `EAA`.
+- Permissions: `instagram_basic`, `instagram_manage_comments`, `instagram_content_publish`, `instagram_manage_messages`, `instagram_manage_insights` (add insights via Edit permissions).
+- `IG_APP_SECRET` is the **Meta app secret** (App settings → Basic).
 - Webhook URL: `https://<your-host>/api/webhooks/instagram`, subscribed to `comments` and `messages`. Connecting the account in Settings subscribes it automatically.
 - Comment webhooks need the app Live with Advanced Access.
 - Media formats: images must be JPEG. Video must be MP4 or MOV.
