@@ -125,6 +125,11 @@ class InstagramAdapter:
         return {m["name"]: (m.get("total_value") or {}).get("value", (m.get("values") or [{}])[0].get("value"))
                 for m in j.get("data", [])}
 
+    async def media_counts(self, media_id: str) -> dict:
+        """Likes and comments from basic media fields: works without the insights permission."""
+        j = await self._call("GET", f"{self.base}/{media_id}", params={"fields": "like_count,comments_count"})
+        return {"likes": j.get("like_count"), "comments": j.get("comments_count")}
+
     async def account_insights(self, ig: str, metrics: str, since: int, until: int) -> dict:
         j = await self._call("GET", f"{self.base}/{ig}/insights", params={
             "metric": metrics, "period": "day", "metric_type": "total_value", "since": since, "until": until})

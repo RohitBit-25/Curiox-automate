@@ -1,4 +1,4 @@
-from datetime import UTC, date, datetime
+from datetime import UTC, date, datetime, timedelta
 
 from sqlalchemy import func, select
 
@@ -70,5 +70,18 @@ async def test_insights_daily_survives_permission_error(session):
     await account(session)
     fake = FakeAdapter(errors={"account_insights": PlatformError("(#10) Application does not have permission", 10)})
     await insights.insights_daily(session, adapter_factory=fake)
-    assert await session.scalar(select(func.count()).select_from(AccountSnapshot)) == 0
     assert (await session.get(Account, 1)).status == "active"
+    # no insights permission: followers are still recorded, metrics left empty
+    y = await session.scalar(select(AccountSnapshot).where(AccountSnapshot.day == insights.local_today() - timedelta(days=1)))
+    assert y.followers == 1234 and y.metrics == {}
+
+
+async def test_media_falls_back_to_likes_and_comments_without_insights(session):
+    a = await account(session)
+    session.add(ContentItem(week_start=TODAY, format="image", pillar="x", status="published", external_media_id="m-2",
+                            published_at=datetime.now(UTC)))
+    await session.commit()
+    fake = FakeAdapter(errors={"media_insights": PlatformError("(#10) no permission", 10)})
+    assert await insights.media_insights(session, a, fake) == 1
+    item = await session.scalar(select(ContentItem))
+    assert item.insights == {"likes": 7, "comments": 2}

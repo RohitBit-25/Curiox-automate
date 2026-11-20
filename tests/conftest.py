@@ -97,6 +97,10 @@ class FakeAdapter:
         self._hit("media_insights", mid, metrics)
         return {m: self.insights.get(m, 1) for m in metrics.split(",")}
 
+    async def media_counts(self, mid):
+        self._hit("media_counts", mid)
+        return {"likes": 7, "comments": 2}
+
     async def account_insights(self, ig, metrics, since, until):
         self._hit("account_insights", ig, metrics)
         return {m: self.insights.get(m, 0) for m in metrics.split(",")}
