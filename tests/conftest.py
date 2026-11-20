@@ -41,19 +41,81 @@ class FakeLLM:
 
 
 class FakeAdapter:
-    def __init__(self, error=None):
-        self.error, self.replies = error, []
+    """Records every call in .calls; returns deterministic ids. errors={"method": PlatformError(...)}."""
+    def __init__(self, error=None, errors=None, statuses=None, quota=(0, 50), me=None, insights=None, profile=None):
+        self.error, self.errors = error, errors or {}
+        self.statuses, self.quota = list(statuses or ["FINISHED"]), quota
+        self.me_data = me or {"user_id": "17841", "username": "curiox.os", "followers_count": 1234, "media_count": 10}
+        self.insights, self.profile = insights or {}, profile or {}
+        self.calls, self.replies, self.counter = [], [], 0
 
     def __call__(self, platform, token):  # usable as adapter_factory
         self.token = token
         return self
 
+    def _hit(self, name, *args):
+        self.calls.append((name, *args))
+        if err := self.errors.get(name):
+            raise err
+
+    def _id(self, prefix):
+        self.counter += 1
+        return f"{prefix}-{self.counter}"
+
     async def reply_to_comment(self, comment_id, message):
         if self.error:
             raise self.error
+        self._hit("reply_to_comment", comment_id, message)
         self.replies.append((comment_id, message))
         return f"reply-{len(self.replies)}"
 
+    async def me(self):
+        self._hit("me")
+        return self.me_data
+
+    async def create_container(self, ig, params):
+        self._hit("create_container", ig, params)
+        return self._id("container")
+
+    async def container_status(self, cid):
+        self._hit("container_status", cid)
+        return self.statuses.pop(0) if len(self.statuses) > 1 else self.statuses[0]
+
+    async def publish_container(self, ig, cid):
+        self._hit("publish_container", ig, cid)
+        return self._id("media")
+
+    async def publishing_limit(self, ig):
+        self._hit("publishing_limit", ig)
+        return self.quota
+
+    async def media_info(self, mid):
+        self._hit("media_info", mid)
+        return {"permalink": f"https://www.instagram.com/p/{mid}/"}
+
+    async def media_insights(self, mid, metrics):
+        self._hit("media_insights", mid, metrics)
+        return {m: self.insights.get(m, 1) for m in metrics.split(",")}
+
+    async def account_insights(self, ig, metrics, since, until):
+        self._hit("account_insights", ig, metrics)
+        return {m: self.insights.get(m, 0) for m in metrics.split(",")}
+
+    async def private_reply(self, ig, comment_id, text):
+        self._hit("private_reply", ig, comment_id, text)
+        return self._id("msg")
+
+    async def send_message(self, ig, igsid, text):
+        self._hit("send_message", ig, igsid, text)
+        return self._id("msg")
+
+    async def user_profile(self, igsid):
+        self._hit("user_profile", igsid)
+        return self.profile
+
+    async def subscribe_webhooks(self, ig, fields="comments,messages"):
+        self._hit("subscribe_webhooks", ig, fields)
+        return True
 
 H = {"Authorization": "Bearer t0ken"}
 
