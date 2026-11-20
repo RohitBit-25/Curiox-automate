@@ -1,50 +1,82 @@
-# Curiox Growth Engine
+# Curiox OS
 
-A review queue for Curiox's social engagement. It finds posts worth replying to, drafts up to three comments in the post's language (English, Hindi, Hinglish) and waits for a human to approve one.
+The command center for growing the **@curiox.os** Instagram account: plan and publish content, turn comments into conversations, reply to DMs, find small-business clients, and see what's working.
 
-**Safety rules (enforced in code, not just config):**
-- Nothing is posted without human approval. The app refuses to start if `HUMAN_APPROVAL_REQUIRED=false`, `THIRD_PARTY_AUTO_COMMENT=true` or `DISCOVERY_MODE` is changed.
-- Third-party posts are never commented on automatically. You copy the approved text, post it yourself, then click **Mark posted**.
-- The only automated writes are replies to comments on Curiox's **own** Instagram posts, through the official API, after approval.
-- There is no scraping. A third-party post enters the system only when you paste its link and caption.
-- The same text is never posted twice, and every action is written to the audit log.
-- Access tokens are encrypted at rest (Fernet) and never returned by the API. A permission or token error pauses the account.
+It automates everything Instagram's official API allows on **your own account**. Anything involving other people's accounts stays manual by design.
 
-## How it works
+| Runs on its own | You do it, the AI prepares it | Never |
+|---|---|---|
+| Publishing approved posts at their scheduled time | Comments on other people's posts (AI drafts, you post) | Auto-commenting on others' posts |
+| Keyword DMs: comment "GUIDE" on your post, get a DM | Outreach to small businesses (AI audits + drafts the pitch) | Follow/unfollow automation |
+| Replies to comments on your posts, and to DMs people send you (when set to Auto) | Approving content | Cold DMs, scraping, browser bots |
+| Daily Insights snapshots and post analytics | | |
 
-1. **Sources:** links you submit (with caption) and comments on your own media (polled every 30 minutes, or pushed by webhook).
-2. **Pipeline** (`app/pipeline.py`): the LLM analyses the post, then a relevance score is computed (topic 30%, audience 25%, conversation 20%, quality 15%, recency 10%; threshold 0.65). Giveaways, bait and sensitive posts are rejected. Then the LLM drafts comments using brand knowledge, and deterministic checks run (`app/rules.py`).
-3. **Review** (dashboard → Queue): edit, approve or reject. "Why this comment?" shows the reasoning.
-4. **Publish** (`app/publisher.py`): own-account replies only, re-validated before every call.
+Why the line is there: Instagram's API has no way to act on other accounts, and bot tools that do get accounts action-blocked or disabled, which is the opposite of growth.
+
+## What's inside
+
+- **Today**: what needs you now, the next 48 hours of posts, follow-ups due, setup checklist.
+- **Content**: AI plans a week from your pillars and a brief, then drafts each post with scored hooks (26 formulas), a lint-checked caption, and sized hashtags. You approve, add media, and it publishes.
+- **Engagement**: a daily round of creators and posts to comment on, with AI-drafted comments you post yourself, plus a streak.
+- **Inbox**: DMs with drafted replies, sent only inside Instagram's 24-hour window; comments on your posts.
+- **Keyword DMs**: comment-to-DM rules. One DM per person per keyword, within 7 days of the comment, capped per hour.
+- **Leads**: kanban for small businesses. Paste their profile; the AI scores it on a 12-part rubric, finds a problem Curiox can solve, and drafts the pitch and two follow-ups.
+- **Analytics**: followers, reach, engagement rate, best pillars and formats, keyword DMs, leads by stage.
+- **Brand & voice**: who Curiox is, pillars, always/never rules, example captions, and verified facts. Every prompt uses it.
+
+## Safety model
+
+- **Third-party content is never automated.** The publisher refuses it, and the Instagram adapter has no method to comment on others' media, follow, or message someone who hasn't messaged or commented first.
+- **Auto-reply needs two keys:** the mode set to Auto in Settings (every change is audited), and `AUTOMATION_PAUSED=false`. Even then, a reply only goes out if every check passes: a simple bucket (question, thanks, useful point; never leads, complaints or sensitive topics), AI confidence above your threshold, no quality flags or facts to verify, AI-tell check, hourly cap, and per-person cap. Otherwise it waits in the queue.
+- **Content always needs a human approval.**
+- **No duplicates:** the same text is never posted twice, and each keyword DM goes to a person once.
+- **Account protection:** tokens are Fernet-encrypted and never returned by the API. A dead token or a permission error pauses the account.
+- **Startup checks:** the app refuses to start if `HUMAN_APPROVAL_REQUIRED=false`, `THIRD_PARTY_AUTO_COMMENT=true`, or `DISCOVERY_MODE` is changed.
 
 ## Run it
 
 ```bash
 cp .env.example .env
-python3 -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"  # -> TOKEN_ENCRYPTION_KEY
-# set ANTHROPIC_API_KEY, and DASHBOARD_USERS=admin:<long random token>
+python3 -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"   # -> TOKEN_ENCRYPTION_KEY
+# set DASHBOARD_USERS=admin:<long random token>, ANTHROPIC_API_KEY, and later the Instagram values
 docker compose up --build -d
 ```
 
-- Dashboard: http://localhost:5173. Go to Settings and paste your dashboard token.
-- API: http://localhost:8000/docs
-- For production on a VPS, put an HTTPS reverse proxy in front. The ports are bound to localhost, and the webhook URL must be public HTTPS.
+Open http://localhost:5173, go to **Settings**, and paste your dashboard token. Everything works without keys: features that need a key explain exactly what to add.
 
-## Instagram setup
+## Keys and where they go
 
-- **Account type:** Curiox must be a professional (Creator) account, using the Instagram API with Instagram Login.
-- **Scopes:** `instagram_business_basic` and `instagram_business_manage_comments`.
-- **Connect:** paste a long-lived token in Settings. It refreshes automatically every night.
-- **Webhook:** `https://<your-host>/api/webhooks/instagram`, with verify token `IG_WEBHOOK_VERIFY_TOKEN`, subscribed to the `comments` field.
+| What | Env / place | Unlocks |
+|---|---|---|
+| Anthropic API key | `ANTHROPIC_API_KEY` | Planning, drafts, comment and DM replies, lead research |
+| Instagram long-lived token | Settings → Instagram account | Comments, publishing, insights, keyword DMs |
+| Meta app secret + verify token | `IG_APP_SECRET`, `IG_WEBHOOK_VERIFY_TOKEN` | Real-time comments and DMs (webhooks) |
+| Public https URL | `PUBLIC_BASE_URL` | Publishing (Instagram fetches media from `/media/…`) |
+
+**Meta app (Instagram API with Instagram Login):**
+- Permissions: `instagram_business_basic`, `instagram_business_manage_comments`, `instagram_business_content_publish`, `instagram_business_manage_messages`, `instagram_business_manage_insights`.
+- Webhook URL: `https://<your-host>/api/webhooks/instagram`, subscribed to `comments` and `messages`. Connecting the account in Settings subscribes it automatically.
+- Comment webhooks need the app Live with Advanced Access.
+- Media formats: images must be JPEG. Video must be MP4 or MOV.
+
+**Production:** put an HTTPS reverse proxy in front and route `/api/*` and `/media/*` to the API (port 8000) and everything else to the dashboard (port 5173). Ports are bound to localhost.
 
 ## Tests
 
-No Postgres, Redis or LLM needed:
-
 ```bash
 python3 -m venv .venv && .venv/bin/pip install -r requirements.txt && .venv/bin/pytest -q
+cd dashboard && npm ci && npm run build
 ```
 
-## Adding a platform
+The tests need no Postgres, Redis, network, or keys.
 
-Implement `app/platforms/base.py:PlatformAdapter` and register it in `app/platforms/__init__.py:ADAPTERS`. The AI pipeline, database and analytics don't depend on any platform.
+## Layout
+
+- `app/`: FastAPI and Celery.
+  - Domain modules: `content.py`, `automation.py` (funnels and auto gate), `inbox.py`, `growth.py` (leads and engagement round), `insights.py`, `pipeline.py` (comment drafting), `publisher.py`.
+  - Rules: `rules.py` and `craft.py`.
+  - Instagram: `platforms/instagram.py`.
+- `prompts/`: every prompt, as plain text.
+- `app/vendor/ig_agent/`: MIT-licensed hook scorer, AI-tell detector, caption lint and profile rubric (see `NOTICE`).
+- `dashboard/`: React and TypeScript, with no UI library.
+- New platforms: implement `app/platforms/base.py:PlatformAdapter` and register it in `app/platforms/__init__.py`.
