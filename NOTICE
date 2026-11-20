@@ -1,0 +1,9 @@
+Curiox OS includes third-party material:
+
+1. app/vendor/ig_agent/ (hookscore.py, hooks.json, detect.py, slop.json, caption.py, rubric.json)
+   From https://github.com/Jakeschincariol/instagram-agent-skill, copied unmodified.
+   Copyright (c) 2026 Jake Schincariol. MIT License (see app/vendor/ig_agent/LICENSE).
+
+2. Hashtag sizing tiers, voice rules and algorithm heuristics paraphrased in prompts/
+   From https://github.com/sergebulaev/instagram-skills.
+   Copyright (c) 2026 Sergey Bulaev. MIT License.
