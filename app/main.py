@@ -5,7 +5,7 @@ from fastapi import Depends, FastAPI, HTTPException
 from fastapi.responses import FileResponse
 from sqlalchemy import select
 
-from app.api import analytics, automation, content, opportunities, sources, webhooks
+from app.api import analytics, automation, content, inbox, opportunities, sources, webhooks
 from app.config import settings
 from app.content import MEDIA_NAME
 from app.deps import current_user, get_session
@@ -15,7 +15,7 @@ logging.getLogger("httpx").setLevel(logging.WARNING)  # httpx logs full URLs, wh
 
 app = FastAPI(title="Curiox OS")
 auth = [Depends(current_user)]
-for r in (opportunities.router, sources.router, analytics.router, automation.router, content.router):
+for r in (opportunities.router, sources.router, analytics.router, automation.router, content.router, inbox.router):
     app.include_router(r, prefix="/api", dependencies=auth)
 app.include_router(webhooks.router, prefix="/api")  # HMAC-authenticated
 

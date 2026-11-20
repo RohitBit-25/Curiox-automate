@@ -1,4 +1,4 @@
-"""Instagram webhooks: comments on Curiox's own media. Authenticated by HMAC signature, not dashboard token."""
+"""Instagram webhooks: comments on our media + DMs to us. Authenticated by HMAC signature, not dashboard token."""
 import hashlib
 import hmac
 import json
@@ -9,7 +9,7 @@ from fastapi import APIRouter, Depends, Query, Request
 from fastapi.responses import PlainTextResponse, Response
 from sqlalchemy import select
 
-from app import workers
+from app import inbox, workers
 from app.config import settings
 from app.deps import get_session
 from app.discovery import ingest_item
@@ -37,7 +37,7 @@ async def receive(request: Request, session=Depends(get_session)):
     if not secret or not hmac.compare_digest(request.headers.get("X-Hub-Signature-256", ""), expected):
         return Response(status_code=403)
 
-    new_ids = []
+    new_ids, conv_ids = [], set()
     try:
         for entry in json.loads(raw).get("entry", []):
             account = await session.scalar(select(Account).where(
@@ -56,11 +56,17 @@ async def receive(request: Request, session=Depends(get_session)):
                     published_at=datetime.fromtimestamp(entry["time"], UTC) if entry.get("time") else None)
                 if post := await ingest_item(session, account, item):
                     new_ids.append(post.id)
+            for ev in entry.get("messaging", []):
+                if conv_id := await inbox.ingest_messaging(session, account, ev):
+                    conv_ids.add(conv_id)
         await session.commit()
     except (KeyError, TypeError, ValueError, AttributeError) as e:
         # Payload shape not verified against live traffic yet; log and ack so Meta doesn't retry forever.
         log.warning("unrecognised instagram webhook payload: %s", e)
         await session.rollback()
+        new_ids, conv_ids = [], set()
     for post_id in new_ids:
         workers.enqueue_process(post_id)
+    for conv_id in conv_ids:
+        workers.enqueue_dm(conv_id)
     return {"ok": True}

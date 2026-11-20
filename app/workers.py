@@ -9,7 +9,7 @@ from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 from sqlalchemy.pool import NullPool
 
-from app import automation, content, publisher
+from app import automation, content, inbox, publisher
 from app.config import settings
 from app.discovery import discover_account
 from app.llm import get_llm, llm_configured
@@ -127,6 +127,24 @@ def draft_item_task(item_id: int):
 @celery.task(name="publish_due")  # NO autoretry: the next tick (one minute later) is the retry
 def publish_due_task():
     return run(content.publish_tick)
+
+
+@celery.task(name="dm_reply", autoretry_for=(Exception,), retry_backoff=True, max_retries=2)
+def dm_reply_task(conv_id: int):
+    run(inbox.draft_dm_reply, conv_id, get_llm() if llm_configured() else None)
+
+
+@celery.task(name="send_dm")  # NO autoretry: a failed send waits for a human
+def send_dm_task(message_id: int):
+    return run(inbox.send_dm, message_id)
+
+
+def enqueue_dm(conv_id: int) -> None:
+    dm_reply_task.delay(conv_id)
+
+
+def enqueue_send_dm(message_id: int) -> None:
+    send_dm_task.delay(message_id)
 
 
 def enqueue_plan(week_start_iso: str, brief: str, count: int, user: str) -> None:
