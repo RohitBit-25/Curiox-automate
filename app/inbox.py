@@ -66,7 +66,9 @@ async def link_lead(session, conv: Conversation) -> None:
 
 
 def dm_flags(text: str) -> list[str]:
-    return ["empty"] if not text.strip() else ["too_long"] if len(text.encode()) > 1000 else []
+    if not text.strip():
+        return ["empty"]
+    return (["too_long"] if len(text.encode()) > 1000 else []) + (["ai_slop"] if craft.slop_hits(text) else [])
 
 
 async def draft_dm_reply(session, conv_id: int, llm=None, adapter_factory=None, force: bool = False) -> Message | None:
@@ -110,7 +112,8 @@ async def draft_dm_reply(session, conv_id: int, llm=None, adapter_factory=None, 
         knowledge="\n".join(f"- [{r.kind}] {r.title}: {r.content}" for r in kn) or "none",
         history="\n".join(f"{'them' if m.direction == 'in' else 'us'}: {m.text}" for m in history[-20:]),
     ), DM_SCHEMA, "low")
-    text = craft.scrub(d["reply"])
+    system = creator_system(s["voice"])
+    text = (await pipeline.humanize(llm, system, [craft.scrub(d["reply"])], "DM reply"))[0]
 
     await session.execute(update(Message).where(Message.conversation_id == conv.id, Message.status == "draft")
                           .values(status="discarded"))

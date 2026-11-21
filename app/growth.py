@@ -131,8 +131,9 @@ async def research_lead(session, lead_id: int, llm, adapter_factory=None) -> Lea
     ), LEAD_SCHEMA, "medium")
     lead.research = d
     lead.rubric_total = craft.rubric_total(d["rubric"])
-    lead.pitch = craft.scrub(d["pitch"])
-    lead.followups = [craft.scrub(f) for f in d["followups"][:2]]
+    texts = await pipeline.humanize(llm, creator_system(voice), [craft.scrub(t) for t in [d["pitch"], *d["followups"][:2]]],
+                                     "Instagram DM to a business owner")
+    lead.pitch, lead.followups = texts[0], texts[1:]
     if lead.stage == "new":
         lead.stage = "researched"
     audit(session, "system", "lead_researched", "lead", lead.id, rubric_total=lead.rubric_total)

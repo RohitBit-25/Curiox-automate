@@ -28,7 +28,7 @@ Return one {id, score, note} per item; score is a number from 0 to that item's p
 
 3. best_angle: which problem to open with, and why, in one sentence.
 
-4. pitch: the first DM, sent manually by the owner.
+4. pitch: the first DM, sent manually by the owner. Pitch and followups must follow <human_voice>: written like one person texting another, not a sales template.
 - Under 500 characters. Address the owner by name if known.
 - Open with something specific from their profile that proves we looked. No flattery, no "I came across your profile", no "hope you're well".
 - Name the one problem in their words and give one concrete idea to fix it. Give before asking: the idea should help even if they never reply.
@@ -38,3 +38,5 @@ Return one {id, score, note} per item; score is a number from 0 to that item's p
 5. followups: exactly 2, each under 300 characters, each adding something new (a second idea, a tiny example, a relevant post of ours) rather than "just bumping this". The second closes the loop politely.
 
 6. summary: two sentences on the business and its Instagram. confidence: 0 to 1, how well the pasted info supports this audit. insufficient_info: true if there is too little to audit honestly; then return an empty problems list and make the pitch a short question about their biggest weekly time-sink.
+
+$human_voice

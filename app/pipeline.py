@@ -6,7 +6,7 @@ from string import Template
 from sqlalchemy import select
 from sqlalchemy.orm import selectinload
 
-from app import prefs
+from app import craft, prefs
 from app.config import settings
 from app.llm import LLMError
 from app.models import Approval, BrandKnowledge, CommentSuggestion, Post, audit
@@ -19,6 +19,7 @@ STRATEGIES = ["insight", "question", "experience", "discussion", "appreciation"]
 def render(template: str, /, **kw) -> str:
     # Positional-only so prompts can use any variable name (e.g. $name).
     # string.Template: user content with braces or $ is never re-interpreted.
+    kw.setdefault("human_voice", (PROMPTS / "human_voice.txt").read_text())  # any prompt can use $human_voice
     return Template((PROMPTS / template).read_text()).safe_substitute(kw)
 
 
@@ -55,8 +56,28 @@ GENERATION_SCHEMA = _obj({
 
 
 def system_prompt(voice: dict | None = None) -> str:
-    base = (PROMPTS / "personality.txt").read_text()
+    base = (PROMPTS / "personality.txt").read_text() + "\n\n" + (PROMPTS / "human_voice.txt").read_text()
     return base + "\n\n" + prefs.voice_block(voice) if voice else base
+
+
+REWRITE_SCHEMA = _obj({"texts": STRS})
+
+
+async def humanize(llm, system: str, texts: list[str], kind: str) -> list[str]:
+    """One rewrite pass for drafts that read machine-written. Clean drafts are returned untouched, at no LLM cost."""
+    bad = [(i, t, h) for i, t in enumerate(texts) if (h := craft.slop_hits(t))]
+    if not bad:
+        return texts
+    try:
+        out = (await llm.json(system, render("humanize.txt", kind=kind, drafts="\n\n".join(
+            f"<draft>{t}</draft>\nProblems: {'; '.join(h)}" for _, t, h in bad)), REWRITE_SCHEMA, "low"))["texts"]
+    except LLMError:
+        return texts  # keep the originals; they stay flagged ai_slop for the reviewer
+    texts = list(texts)
+    for (i, _, _), new in zip(bad, out):
+        if new.strip():
+            texts[i] = craft.scrub(new.strip())
+    return texts
 
 
 def pick_knowledge(rows: list[BrandKnowledge], terms: list[str], limit: int = 8) -> list[BrandKnowledge]:
@@ -133,11 +154,14 @@ async def process_post(session, post_id: int, llm) -> None:
     if g["no_comment"]:
         return await _skip(session, post, f"no_comment: {g['no_comment_reason']}")
 
-    # Stage D: deterministic quality control
+    # Stage D: rewrite anything that reads machine-written, then deterministic quality control
+    sugg = g["comment_suggestions"][:3]
+    for s, text in zip(sugg, await humanize(llm, system, [s["text"] for s in sugg], "comment")):
+        s["text"] = text
     kept: list[tuple[dict, list[str]]] = []
-    for s in g["comment_suggestions"][:3]:
+    for s in sugg:
         issues = quality_issues(s["text"], post.language, previous + [k["text"] for k, _ in kept],
-                                verified, s["strategy"])
+                                verified, s["strategy"]) + (["ai_slop"] if craft.slop_hits(s["text"]) else [])
         if not set(issues) & DROP:
             kept.append((s, issues))
     if not kept:

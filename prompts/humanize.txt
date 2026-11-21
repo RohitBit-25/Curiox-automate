@@ -1,0 +1,10 @@
+These $kind drafts read machine-written. Rewrite each one so it sounds like a real person typed it, following <human_voice>.
+
+$human_voice
+
+Keep for each draft: the same meaning and point, the same language (English, Hindi or Hinglish), every fact, name, number, [PLACEHOLDER] and link exactly as written. Don't add new claims, experiences or questions. Shorter is usually better.
+
+Problems found in each draft (fix all of them):
+$drafts
+
+Return texts: the rewritten drafts, in the same order, one per draft.

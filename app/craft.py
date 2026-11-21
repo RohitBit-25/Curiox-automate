@@ -56,6 +56,40 @@ def ai_tells(text: str) -> dict:
             "checks": {k: {"score": round(v[0], 1), "detail": v[1]} for k, v in results.items()}}
 
 
+# Short-text tells (comments, DMs). The detect.py panel needs ~25+ words; these work on one line.
+_SLOP_WORDS = [(e["find"], re.compile(rf"\b{re.escape(e['find'])}\b", re.I)) for e in SLOP["words"] + SLOP["phrases"]]
+_STRUCTURES = [(e["name"], re.compile(e["regex"])) for e in SLOP["structures"]]  # regexes carry their own (?i)
+_OPENER = re.compile(r"^\W*(great (point|post|insight|share|question)|love (this|how|that|it)|absolutely|totally agree|so true|"
+                     r"interesting|well said|spot on|couldn'?t agree|this!|wow|kudos|hats off|what a|amazing|brilliant|"
+                     r"fantastic|excellent|such a|really (insightful|helpful|great))\b", re.I)
+_ASSISTANT = re.compile(r"thanks? (you )?for reaching out|happy to help|i'?d be (happy|glad) to|feel free to|don'?t hesitate|"
+                        r"hope (this|that) helps|let me know if you have any|great question|i understand your|"
+                        r"any (other|further) questions|looking forward to hearing|hi there|"
+                        r"what do you think\??\s*$|thoughts\?\s*$|curious to (hear|know)|would love to (hear|know)|"
+                        r"at the end of the day|that'?s the real (lesson|win)|this is the way|game.?changer", re.I)
+_LOUD_EMOJI = re.compile("[\U0001F680\U0001F525\u2728\U0001F4A1\U0001F4AF]")
+_EMOJI = re.compile("[\U0001F300-\U0001FAFF\u2600-\u27BF]")
+
+
+def slop_hits(text: str) -> list[str]:
+    """Phrases that make a short comment or DM read machine-written. Empty list = reads human."""
+    hits = [f"opener: {m.group(0).strip()}" for m in [_OPENER.match(text)] if m]
+    hits += [f"phrase: {m.group(0)}" for m in _ASSISTANT.finditer(text)]
+    hits += [f"word: {w}" for w, rx in _SLOP_WORDS if rx.search(text)]
+    hits += [f"shape: {name}" for name, rx in _STRUCTURES if rx.search(text)]
+    if re.search("[\u2014\u2013]", text):
+        hits.append("dash: em/en dash")
+    if ";" in text:
+        hits.append("semicolon")
+    if text.count("!") > 1:
+        hits.append("too many !")
+    if _LOUD_EMOJI.search(text) or len(_EMOJI.findall(text)) > 1:
+        hits.append("emoji")
+    if "#" in text and re.search(r"(^|\s)#\w", text):
+        hits.append("hashtag")
+    return list(dict.fromkeys(hits))
+
+
 def scrub(text: str) -> str:
     """Remove invisible watermark characters and normalise typography. Keeps em dashes."""
     return "".join(c for c in text if c not in _INVISIBLE).translate(_TYPO)
