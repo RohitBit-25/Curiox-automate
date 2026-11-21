@@ -29,3 +29,15 @@ async def test_voice_roundtrip(client):
     voice["who"] = "Builder shipping AI automations for small businesses"
     r = await client.patch("/api/settings", headers=H, json={"voice": voice})
     assert r.json()["voice"]["who"].startswith("Builder")
+
+
+def test_brain_and_writer_models(monkeypatch):
+    from app import llm
+    monkeypatch.setattr(llm.settings, "LLM_PROVIDER", "anthropic")
+    monkeypatch.setattr(llm.settings, "LLM_MODEL", "claude-opus-5-5")
+    monkeypatch.setattr(llm.settings, "LLM_BRAIN_MODEL", "claude-fable-5-2")
+    w, b = llm.get_llm(), llm.get_llm("brain")
+    assert (w.model, w.effort) == ("claude-opus-5-5", None)
+    assert (b.model, b.effort) == ("claude-fable-5-2", "high")
+    monkeypatch.setattr(llm.settings, "LLM_BRAIN_MODEL", "")
+    assert llm.get_llm("brain").model == "claude-opus-5-5"

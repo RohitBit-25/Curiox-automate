@@ -43,7 +43,7 @@ export const upload = <T,>(path: string, file: File) =>
 export type Mode = "off" | "draft" | "auto";
 
 export type Status = {
-  llm: { configured: boolean; provider: string; model: string };
+  llm: { configured: boolean; provider: string; model: string; brain_model: string };
   instagram: { connected: boolean; active: boolean; handle: string | null; paused_reason: string | null; token_expires_at: string | null };
   webhooks: { configured: boolean };
   publishing: { configured: boolean };

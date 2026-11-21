@@ -118,7 +118,7 @@ async def delete_lead(lead_id: int, user=Depends(current_user), session=Depends(
 async def research(lead_id: int, session=Depends(get_session)):
     from app.llm import get_llm
     await load_lead(session, lead_id)
-    await growth.research_lead(session, lead_id, get_llm())
+    await growth.research_lead(session, lead_id, get_llm("brain"))
     return await lead_dict(session, await load_lead(session, lead_id))
 
 

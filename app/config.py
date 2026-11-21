@@ -15,7 +15,10 @@ class Settings(BaseSettings):
     DASHBOARD_USERS: str = ""
 
     LLM_PROVIDER: Literal["anthropic", "openai_compat"] = "anthropic"
-    LLM_MODEL: str = "claude-opus-5-5"
+    LLM_MODEL: str = "claude-opus-5-5"  # the writer: comments, DMs, captions, rewrites, auto-reply checks
+    # The brain: weekly content plans and lead audits (strategy). Few calls, slower, 2x Opus price. Empty = LLM_MODEL.
+    LLM_BRAIN_MODEL: str = "claude-fable-5-2"
+    LLM_BRAIN_EFFORT: str = "high"
     ANTHROPIC_API_KEY: str = ""
     OPENAI_COMPAT_BASE_URL: str = ""
     OPENAI_COMPAT_API_KEY: str = ""

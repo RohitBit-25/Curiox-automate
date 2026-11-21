@@ -124,7 +124,7 @@ def weekly_report_task():
 
 @celery.task(name="plan_week", **RETRY)
 def plan_week_task(week_start_iso: str, brief: str, count: int, user: str):
-    for item_id in run(content.plan_week, date.fromisoformat(week_start_iso), brief, count, user, get_llm()):
+    for item_id in run(content.plan_week, date.fromisoformat(week_start_iso), brief, count, user, get_llm("brain")):
         enqueue_draft(item_id)
 
 
@@ -168,7 +168,7 @@ def fetch_creators_task():
 
 @celery.task(name="research_lead", **RETRY)
 def research_lead_task(lead_id: int):
-    run(growth.research_lead, lead_id, get_llm())
+    run(growth.research_lead, lead_id, get_llm("brain"))
 
 
 def enqueue_research(lead_id: int) -> None:

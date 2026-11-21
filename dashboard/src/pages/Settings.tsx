@@ -35,7 +35,7 @@ function Integrations() {
   if (!s) return null;
   const webhook = `${location.origin}/api/webhooks/instagram`;
   const rows: [string, boolean, string][] = [
-    ["AI (drafts, planning, research)", s.llm.configured, s.llm.configured ? `${s.llm.provider}, ${s.llm.model}` : "Set ANTHROPIC_API_KEY in .env and restart."],
+    ["AI (drafts, planning, research)", s.llm.configured, s.llm.configured ? `Writing: ${s.llm.model}${s.llm.brain_model ? ` · Plans and lead strategy: ${s.llm.brain_model}` : ""}` : "Set ANTHROPIC_API_KEY in .env and restart."],
     ["Instagram account", s.instagram.connected && s.instagram.active, s.instagram.connected ? (s.instagram.active ? `@${s.instagram.handle}` : `Paused: ${s.instagram.paused_reason}`) : "Connect below."],
     ["Webhooks (DMs, comments, keyword DMs)", s.webhooks.configured, s.webhooks.configured ? "Configured" : "Set IG_APP_SECRET and IG_WEBHOOK_VERIFY_TOKEN."],
     ["Publishing", s.publishing.configured, s.publishing.configured ? "PUBLIC_BASE_URL is set" : "Set PUBLIC_BASE_URL to this server's https address."],

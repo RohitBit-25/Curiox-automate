@@ -12,9 +12,9 @@ class LLMError(Exception):
 
 
 class AnthropicLLM:
-    def __init__(self, model: str, api_key: str):
+    def __init__(self, model: str, api_key: str, effort: str | None = None):
         self.client = AsyncAnthropic(api_key=api_key or None)  # None -> SDK resolves env/profile credentials
-        self.model = model
+        self.model, self.effort = model, effort  # effort, when set, overrides each call's (the brain thinks harder)
 
     async def json(self, system: str, prompt: str, schema: dict, effort: str = "low") -> dict:
         r = await self.client.beta.messages.create(
@@ -22,7 +22,7 @@ class AnthropicLLM:
             max_tokens=16000,
             system=system,
             messages=[{"role": "user", "content": prompt}],
-            output_config={"effort": effort, "format": {"type": "json_schema", "schema": schema}},
+            output_config={"effort": self.effort or effort, "format": {"type": "json_schema", "schema": schema}},
             # Server-side refusal fallback: a declined request is re-run on a recommended model.
             betas=["server-side-fallback-2026-07-01"],
             fallbacks="default",
@@ -61,7 +61,10 @@ def llm_configured() -> bool:
     return bool(settings.ANTHROPIC_API_KEY)
 
 
-def get_llm() -> AnthropicLLM | OpenAICompatLLM:
+def get_llm(role: str = "writer") -> AnthropicLLM | OpenAICompatLLM:
+    """writer (default): Opus, everything high-volume. brain: Fable, for plans and strategy."""
     if settings.LLM_PROVIDER == "openai_compat":
         return OpenAICompatLLM(settings.OPENAI_COMPAT_BASE_URL, settings.OPENAI_COMPAT_API_KEY, settings.LLM_MODEL)
+    if role == "brain" and settings.LLM_BRAIN_MODEL:
+        return AnthropicLLM(settings.LLM_BRAIN_MODEL, settings.ANTHROPIC_API_KEY, settings.LLM_BRAIN_EFFORT)
     return AnthropicLLM(settings.LLM_MODEL, settings.ANTHROPIC_API_KEY)

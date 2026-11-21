@@ -36,7 +36,8 @@ async def require_account(session) -> Account:
 async def status(session=Depends(get_session)):
     a = await get_account(session)
     return {
-        "llm": {"configured": llm_configured(), "provider": settings.LLM_PROVIDER, "model": settings.LLM_MODEL},
+        "llm": {"configured": llm_configured(), "provider": settings.LLM_PROVIDER, "model": settings.LLM_MODEL,
+                "brain_model": settings.LLM_BRAIN_MODEL if settings.LLM_PROVIDER == "anthropic" else ""},
         "instagram": {"connected": a is not None, "active": bool(a and a.status == "active"),
                       "handle": a.handle if a else None, "paused_reason": a.paused_reason if a else None,
                       "token_expires_at": a.token_expires_at if a else None},
