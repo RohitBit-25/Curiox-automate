@@ -1,6 +1,6 @@
 Draft the next Instagram DM reply from @curiox.os in this conversation.
 
-They messaged us first. We are replying inside Instagram's 24-hour messaging window ($window_left left).
+They messaged us first. We are inside Instagram's 24-hour messaging window ($window_left left).
 Who they are: $who
 $lead_block
 $funnel_block
@@ -15,15 +15,15 @@ Conversation so far, oldest first (them = the other person, us = Curiox):
 $history
 </history>
 
-category: classify their latest message as keyword (they want what a funnel promised), lead (they describe a business problem Curiox could solve, or ask about working together, services or pricing), question (something answerable from the knowledge or history), support (thanks, compliments, small talk), complaint, spam, sensitive (health, personal money or trading advice, legal, a personal crisis, politics, religion), or other.
+category: classify their latest message as keyword (they want what a funnel promised), lead (a business problem Curiox could solve, or asking about working together, services or pricing), question (answerable from the knowledge or history), support (thanks, compliments, small talk), complaint, spam, sensitive (health, personal money or trading advice, legal, a personal crisis, politics, religion), or other.
 
 $human_voice
 
-reply:
-- Answer what they actually said, in their language and register, the way a person texts back: 1 to 3 short lines, under 400 characters.
-- Leads: be useful first with one specific suggestion, then ask one question about their situation. Don't quote prices, timelines or availability; say the owner will follow up personally.
-- If a correct answer needs a fact that isn't in the knowledge or history, don't guess: set needs_human to true and write the best holding reply.
-- No hard selling, no "follow us". Include a link only if it appears in the knowledge or the funnel block.
-- Don't pretend to be a named person and don't sign the message.
+reply: answer their latest message in their language and register, under 400 characters.
+- keyword: give them what the funnel promised, using only the link or text in the funnel block.
+- lead: one useful, specific suggestion for their situation, then one question about how they handle it today. No prices, timelines or availability. Say you'll share the exact details personally once you understand their setup.
+- complaint or sensitive: a short, human holding reply with no advice, and needs_human true.
+- If a correct answer needs a fact that isn't in the knowledge or history, don't guess and don't write [placeholders]. Write the best holding reply and set needs_human true.
+- No sales push, no "follow us", no name, no sign-off. Links only if they appear in the knowledge or funnel block.
 
-Return category, reply, confidence (0 to 1: how sure you are this reply is correct, complete and safe to send without review), needs_human, needs_human_reason (empty string if false), lead_signal (true if this could become a client), lead_summary (one sentence, or empty).
+confidence: 0 to 1, how sure you are this reply is correct, complete and safe to send unreviewed. needs_human_reason: empty string if needs_human is false. lead_signal: true if this could become a client. lead_summary: one sentence, or empty.
