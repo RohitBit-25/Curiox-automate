@@ -1,12 +1,12 @@
 import { useState, type FormEvent } from "react";
-import { api, post, type Creator, type EngagementToday, type RecentPost } from "../api";
+import { api, post, type Creator, type EngagementToday, type FetchResult, type FollowList, type FollowRow, type RecentPost } from "../api";
 import { useAction, useLoad } from "../useLoad";
 import {
   Badge, Button, Empty, ErrorNote, Field, Meter, Page, Panel, Skeleton, Tabs, go, igProfile, timeAgo, useRoute, useStatus, useToast,
 } from "../ui";
 import { OpportunityCard, QueueList } from "./Queue";
 
-type Tab = "round" | "queue" | "add";
+type Tab = "round" | "follow" | "queue" | "add";
 
 export default function Engagement() {
   const route = useRoute();
@@ -16,9 +16,10 @@ export default function Engagement() {
     <Page title="Engagement" subtitle="Get noticed in your niche with comments worth reading. The AI drafts them; you post every one yourself.">
       <div style={{ marginBottom: 16 }}>
         <Tabs<Tab> label="Engagement view" value={tab} onChange={setTab}
-          items={[["round", "Today's round"], ["queue", "Drafted comments"], ["add", "Add post"]]} />
+          items={[["round", "Today's round"], ["follow", "Follow list"], ["queue", "Drafted comments"], ["add", "Add post"]]} />
       </div>
-      {tab === "round" && <Round />}
+      {tab === "round" && <><FetchPosts /><Round /></>}
+      {tab === "follow" && <Follows />}
       {tab === "queue" && <QueueList source="manual_link" />}
       {tab === "add" && <AddPost creatorId={route.query.get("creator")} />}
     </Page>
@@ -72,6 +73,88 @@ function Round() {
   );
 }
 
+function FetchPosts() {
+  const action = useAction();
+  const toast = useToast();
+  const [r, setR] = useState<FetchResult | null>(null);
+  return (
+    <Panel className="flat" >
+      <div className="row spread">
+        <div className="stack" style={{ gap: 2 }}>
+          <b className="small">Creators' new posts</b>
+          <span className="xs muted">Read every morning at 6:30 from your Creators list, and drafted for you. Nothing is posted.</span>
+        </div>
+        <Button size="sm" busy={action.busy} onClick={() => action.run(() => post<FetchResult>("/engagement/fetch"), (x) => {
+          setR(x);
+          if (x.status === "ok") toast(x.new ? `${x.new} new posts. Drafts appear under Drafted comments shortly.` : "No new posts since last time", "live");
+        })}>Fetch now</Button>
+      </div>
+      {r?.status === "no_permission" && <div className="callout" style={{ marginTop: 10 }}><span className="xs">
+        Instagram won't let this app read other accounts yet. In the Meta app, add the <b>instagram_manage_insights</b> and <b>pages_read_engagement</b> permissions
+        (Use cases → Instagram API → Permissions), generate a new token, and paste it in Settings. Until then, paste posts under Add post.</span></div>}
+      {r?.status === "no_account" && <p className="xs bad-text" style={{ marginTop: 8 }}>Connect your Instagram account in Settings first.</p>}
+      {r?.status === "ok" && r.failed.length > 0 && <p className="xs muted" style={{ marginTop: 8 }}>
+        Couldn't read {r.failed.map((h) => `@${h}`).join(", ")}: personal or private accounts can't be read. Open them by hand.</p>}
+      <ErrorNote error={action.error} />
+    </Panel>
+  );
+}
+
+function Follows() {
+  const { data, error, reload } = useLoad(() => api<FollowList>("/engagement/follows"));
+  const action = useAction();
+  if (error) return <ErrorNote error={error} />;
+  if (!data) return <Skeleton h={90} lines={3} />;
+  const mark = (x: FollowRow, a: "followed" | "followed_back" | "no_follow_back") =>
+    action.run(() => post(`/engagement/follows/${x.kind}/${x.id}`, { action: a }), reload);
+  const rate = data.checked ? Math.round((data.followed_back / data.checked) * 100) : null;
+  const label = (x: FollowRow) => <div className="row">
+    <a className="link" href={igProfile(x.handle)} target="_blank" rel="noopener noreferrer"><b>@{x.handle}</b></a>
+    {x.name && <span className="small muted">{x.name}</span>}<Badge>{x.kind === "lead" ? "business" : "creator"}</Badge></div>;
+
+  return (
+    <div className="stack">
+      <Panel>
+        <div className="row spread" style={{ marginBottom: 8 }}>
+          <b>{data.followed_today} of {data.daily_limit} follows today</b>
+          <span className="dim small">{rate == null ? "Follow-back rate shows after your first checks" : `${rate}% followed back (${data.followed_back} of ${data.checked})`}</span>
+        </div>
+        <Meter value={data.followed_today} max={data.daily_limit} tone="live" />
+        <p className="xs muted" style={{ marginTop: 8 }}>Open each profile, follow by hand, then tick it off. {data.daily_limit} a day keeps a new account clear of Instagram's spam limits.</p>
+      </Panel>
+      {data.to_follow.length === 0 && <Empty title={data.followed_today >= data.daily_limit ? "Done for today" : "Nobody left to follow"}
+        body={data.followed_today >= data.daily_limit ? "Come back tomorrow." : "Add creators or business leads and they'll show up here."}
+        action={data.followed_today >= data.daily_limit ? undefined : <div className="row"><a className="btn" href="#creators">Add creators</a><a className="btn" href="#leads?bulk=1">Add businesses</a></div>} />}
+      {data.to_follow.length > 0 && <Panel className="divide">
+        {data.to_follow.map((x) => (
+          <div key={`${x.kind}${x.id}`} className="item row spread">
+            {label(x)}
+            <div className="row">
+              <a className="btn sm" href={igProfile(x.handle)} target="_blank" rel="noopener noreferrer">Open profile</a>
+              <Button size="sm" variant="primary" busy={action.busy} onClick={() => mark(x, "followed")}>I followed</Button>
+            </div>
+          </div>
+        ))}
+      </Panel>}
+      {data.check_back.length > 0 && <>
+        <div className="section-title"><h2>Did they follow back?</h2><span className="xs muted">Followed 3+ days ago</span></div>
+        <Panel className="divide">
+          {data.check_back.map((x) => (
+            <div key={`${x.kind}${x.id}`} className="item row spread">
+              {label(x)}
+              <div className="row">
+                <Button size="sm" busy={action.busy} onClick={() => mark(x, "followed_back")}>Yes</Button>
+                <Button size="sm" variant="ghost" busy={action.busy} onClick={() => mark(x, "no_follow_back")}>No</Button>
+              </div>
+            </div>
+          ))}
+        </Panel>
+      </>}
+      <ErrorNote error={action.error} />
+    </div>
+  );
+}
+
 function AddPost({ creatorId }: { creatorId: string | null }) {
   const creators = useLoad(() => api<Creator[]>("/creators"));
   const recent = useLoad(() => api<RecentPost[]>("/posts?limit=20"));
@@ -93,7 +176,7 @@ function AddPost({ creatorId }: { creatorId: string | null }) {
         <h3>Paste a post you want to comment on</h3>
         {!status?.llm.configured && <p className="small muted">AI isn't configured yet, so the post is saved and drafted once you add a key.</p>}
         <Field label="Instagram post link"><input required type="url" placeholder="https://www.instagram.com/p/…" value={f.url} onChange={set("url")} /></Field>
-        <Field label="Caption" hint="Paste it in. Curiox OS never fetches other people's pages."><textarea required minLength={10} value={f.caption} onChange={set("caption")} /></Field>
+        <Field label="Caption" hint="Paste it in. Creators on your list are read automatically, so this is for anyone else."><textarea required minLength={10} value={f.caption} onChange={set("caption")} /></Field>
         <div className="form-grid">
           <Field label="Creator">
             <select value={f.creator_id} onChange={set("creator_id")}>

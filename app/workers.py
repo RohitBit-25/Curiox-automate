@@ -9,7 +9,7 @@ from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 from sqlalchemy.pool import NullPool
 
-from app import automation, content, inbox, insights, publisher
+from app import automation, content, growth, inbox, insights, publisher
 from app.config import settings
 from app.discovery import discover_account
 from app.llm import get_llm, llm_configured
@@ -26,6 +26,7 @@ celery.conf.beat_schedule = {
     "weekly_report": {"task": "weekly_report", "schedule": crontab(day_of_week="mon", hour=9, minute=0)},
     "publish_due": {"task": "publish_due", "schedule": crontab()},  # every minute
     "insights_daily": {"task": "insights_daily", "schedule": crontab(hour=6, minute=15)},
+    "fetch_creators": {"task": "fetch_creators", "schedule": crontab(hour=6, minute=30)},  # drafted before your round
 }
 
 # asyncio.run makes a new loop per task, so pooled connections can't be shared across tasks.
@@ -150,6 +151,28 @@ def send_dm_task(message_id: int):
 @celery.task(name="insights_daily")
 def insights_daily_task():
     run(insights.insights_daily)
+
+
+async def _fetch_creators(session):
+    r = await growth.fetch_creator_posts(session)
+    for post_id in r["new_post_ids"]:
+        enqueue_process(post_id)
+    return r
+
+
+@celery.task(name="fetch_creators")
+def fetch_creators_task():
+    r = run(_fetch_creators)
+    return {k: v for k, v in r.items() if k != "new_post_ids"} | {"new": len(r["new_post_ids"])}
+
+
+@celery.task(name="research_lead", **RETRY)
+def research_lead_task(lead_id: int):
+    run(growth.research_lead, lead_id, get_llm())
+
+
+def enqueue_research(lead_id: int) -> None:
+    research_lead_task.delay(lead_id)
 
 
 def enqueue_dm(conv_id: int) -> None:

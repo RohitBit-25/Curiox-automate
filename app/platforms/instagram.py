@@ -6,7 +6,7 @@ Two login flavours, picked from the token (paths are otherwise identical, keyed 
   instagram_content_publish, instagram_manage_messages, instagram_manage_insights.
 - Instagram Login (older apps): Instagram user token "IG...", host graph.instagram.com, account id from /me.
 
-There is deliberately no method to comment on third-party media, follow accounts, or message anyone who
+Other accounts are read only (business_discovery). There is deliberately no method to comment on third-party media, follow accounts, or message anyone who
 hasn't messaged/commented first: those actions don't exist in this adapter.
 """
 from datetime import datetime
@@ -151,6 +151,15 @@ class InstagramAdapter:
     async def user_profile(self, igsid: str) -> dict:
         return await self._call("GET", f"{self.base}/{igsid}", pause_codes=MSG_PAUSE,
                                 params={"fields": "username,name"})
+
+    async def business_discovery(self, handle: str, media_limit: int = 3) -> dict:
+        """Public profile + recent posts of another business/creator account (read only).
+        Needs instagram_basic, instagram_manage_insights and pages_read_engagement. Never pauses the account."""
+        j = await self._call("GET", f"{self.base}/{await self.ig_id()}", pause_codes=MSG_PAUSE, params={"fields": (
+            f"business_discovery.username({handle}){{username,name,biography,website,followers_count,media_count,"
+            f"media.limit({media_limit}){{id,caption,permalink,timestamp,media_product_type}}}}")})
+        bd = j.get("business_discovery", {})
+        return bd | {"media": bd.get("media", {}).get("data", [])}
 
     async def subscribe_webhooks(self, ig: str, fields: str = "comments,messages") -> bool:
         j = await self._call("POST", f"{self.base}/{ig}/subscribed_apps", params={"subscribed_fields": fields})

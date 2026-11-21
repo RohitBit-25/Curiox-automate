@@ -79,7 +79,12 @@ export type Opportunity = {
 export type Creator = {
   id: number; platform: string; handle: string; display_name: string | null; topics: string[];
   audience_note: string | null; active: boolean; last_engaged_at: string | null;
+  followed_at: string | null; followed_back: boolean | null;
 };
+export type BulkResult = { added: string[]; skipped: string[]; researching?: boolean };
+export type FetchResult = { status: "ok" | "no_permission" | "no_account"; new: number; failed: string[]; error?: string };
+export type FollowRow = { kind: "creator" | "lead"; id: number; handle: string; name: string | null; followed_at: string | null; followed_back: boolean | null };
+export type FollowList = { daily_limit: number; followed_today: number; to_follow: FollowRow[]; check_back: FollowRow[]; followed_back: number; checked: number };
 export type Account = {
   id: number; platform: string; handle: string; status: string; paused_reason: string | null; token_expires_at?: string | null;
 };
@@ -143,6 +148,7 @@ export type Lead = {
   id: number; handle: string; name: string | null; niche: string | null; website: string | null; notes: string | null;
   profile_text: string | null; stage: LeadStage; rubric_total: number | null; pitch: string | null;
   followups: string[]; followups_sent: number; contacted_at: string | null; next_followup_at: string | null;
+  followed_at: string | null; followed_back: boolean | null;
   conversation_id: number | null;
   research: null | {
     summary: string; best_angle: string; confidence: number; insufficient_info: boolean;

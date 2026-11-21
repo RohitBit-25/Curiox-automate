@@ -83,7 +83,7 @@ class CreatorBody(BaseModel):
 def creator_dict(c: Creator) -> dict:
     return {"id": c.id, "platform": c.platform, "handle": c.handle, "display_name": c.display_name,
             "topics": c.topics, "audience_note": c.audience_note, "active": c.active,
-            "last_engaged_at": c.last_engaged_at}
+            "last_engaged_at": c.last_engaged_at, "followed_at": c.followed_at, "followed_back": c.followed_back}
 
 
 @router.get("/creators")
@@ -104,6 +104,23 @@ async def add_creator(body: CreatorBody, user=Depends(current_user), session=Dep
     audit(session, user, "add_creator", "creator", c.id, handle=c.handle)
     await session.commit()
     return creator_dict(c)
+
+
+class BulkBody(BaseModel):
+    handles: str = Field(min_length=1, max_length=20000)
+    topics: list[str] = []
+
+
+@router.post("/creators/bulk")
+async def add_creators_bulk(body: BulkBody, user=Depends(current_user), session=Depends(get_session)):
+    from app.growth import parse_handles
+    handles = parse_handles(body.handles)[:200]
+    existing = set(await session.scalars(select(Creator.handle).where(Creator.handle.in_(handles))))
+    added = [h for h in handles if h not in existing]
+    session.add_all([Creator(platform="instagram", handle=h, topics=body.topics) for h in added])
+    audit(session, user, "add_creators_bulk", "creator", None, added=len(added))
+    await session.commit()
+    return {"added": added, "skipped": sorted(existing)}
 
 
 class CreatorPatch(BaseModel):

@@ -1,5 +1,5 @@
 import { useEffect, useState, type DragEvent } from "react";
-import { api, del, patch, post, type Lead, type LeadStage } from "../api";
+import { api, del, patch, post, type BulkResult, type Lead, type LeadStage } from "../api";
 import { useAction, useLoad } from "../useLoad";
 import {
   Badge, Button, CopyButton, Drawer, ErrorNote, Field, Page, Panel, SetupPrompt, Skeleton, fmtDate, go, igProfile, useRoute, useStatus, useToast,
@@ -19,7 +19,7 @@ export default function Leads() {
 
   return (
     <Page title="Leads" subtitle="Small businesses you could help. The AI audits their Instagram from what you paste and drafts a personal first message. You send it yourself."
-      actions={<Button variant="primary" onClick={() => go("leads?new=1")}>Add lead</Button>}>
+      actions={<div className="row"><Button onClick={() => go("leads?bulk=1")}>Add many</Button><Button variant="primary" onClick={() => go("leads?new=1")}>Add lead</Button></div>}>
       <ErrorNote error={leads.error || action.error} />
       {!leads.data ? <Skeleton h={260} /> : (
         <div className="kanban">
@@ -43,9 +43,33 @@ export default function Leads() {
           })}
         </div>
       )}
+      <BulkLeads open={route.query.has("bulk")} onClose={() => go("leads")} onDone={leads.reload} />
       <NewLead open={route.query.has("new")} onClose={() => go("leads")} onCreated={(id) => { leads.reload(); go(`leads/${id}`); }} />
       <LeadDrawer id={route.id ? Number(route.id) : null} onClose={() => go("leads")} onChange={leads.reload} />
     </Page>
+  );
+}
+
+function BulkLeads({ open, onClose, onDone }: { open: boolean; onClose: () => void; onDone: () => void }) {
+  const [f, setF] = useState({ handles: "", niche: "" });
+  const action = useAction();
+  const toast = useToast();
+  useEffect(() => { if (open) setF({ handles: "", niche: "" }); }, [open]);
+  return (
+    <Drawer open={open} onClose={onClose} title="Add many businesses">
+      <p className="small muted">Libraries, coaching centres, shops: anyone you could build for. Each one's public business profile is read
+        (when Instagram allows it) and the AI drafts a first message. You send every message yourself.</p>
+      <Field label="Handles or profile links" hint="Separated by spaces, commas or new lines. Up to 100.">
+        <textarea rows={6} value={f.handles} onChange={(e) => setF({ ...f, handles: e.target.value })} placeholder="@udaipur_library&#10;https://www.instagram.com/some_coaching_centre/" />
+      </Field>
+      <Field label="Type of business (optional)"><input value={f.niche} onChange={(e) => setF({ ...f, niche: e.target.value })} placeholder="library" /></Field>
+      <div><Button variant="primary" busy={action.busy} disabled={!f.handles.trim()} onClick={() => action.run(
+        () => post<BulkResult>("/leads/bulk", { handles: f.handles, niche: f.niche || null }), (r) => {
+          toast(`Added ${r.added.length}${r.skipped.length ? `, ${r.skipped.length} already there` : ""}${r.researching ? ". Researching in the background." : ""}`, "live");
+          onDone(); onClose();
+        })}>Add all</Button></div>
+      <ErrorNote error={action.error} />
+    </Drawer>
   );
 }
 

@@ -74,6 +74,8 @@ class Creator(Base):
     audience_note: Mapped[str | None] = mapped_column(Text)
     active: Mapped[bool] = mapped_column(Boolean, default=True)
     last_engaged_at: Mapped[datetime | None]
+    followed_at: Mapped[datetime | None]  # you followed them (by hand)
+    followed_back: Mapped[bool | None] = mapped_column(Boolean)  # None = not checked yet
     created_at: Mapped[datetime] = mapped_column(default=now)
 
 
@@ -275,6 +277,8 @@ class Lead(Base):
     followups_sent: Mapped[int] = mapped_column(Integer, default=0)
     contacted_at: Mapped[datetime | None]
     next_followup_at: Mapped[datetime | None]
+    followed_at: Mapped[datetime | None]
+    followed_back: Mapped[bool | None] = mapped_column(Boolean)
     created_at: Mapped[datetime] = mapped_column(default=now)
     updated_at: Mapped[datetime] = mapped_column(default=now, onupdate=now)
 

@@ -42,11 +42,12 @@ class FakeLLM:
 
 class FakeAdapter:
     """Records every call in .calls; returns deterministic ids. errors={"method": PlatformError(...)}."""
-    def __init__(self, error=None, errors=None, statuses=None, quota=(0, 50), me=None, insights=None, profile=None):
+    def __init__(self, error=None, errors=None, statuses=None, quota=(0, 50), me=None, insights=None, profile=None, discovery=None):
         self.error, self.errors = error, errors or {}
         self.statuses, self.quota = list(statuses or ["FINISHED"]), quota
         self.me_data = me or {"user_id": "17841", "username": "curiox.os", "followers_count": 1234, "media_count": 10}
         self.insights, self.profile = insights or {}, profile or {}
+        self.discovery = discovery or {}
         self.calls, self.replies, self.counter = [], [], 0
 
     def __call__(self, platform, token):  # usable as adapter_factory
@@ -116,6 +117,10 @@ class FakeAdapter:
     async def user_profile(self, igsid):
         self._hit("user_profile", igsid)
         return self.profile
+
+    async def business_discovery(self, handle, media_limit=3):
+        self._hit("business_discovery", handle)
+        return self.discovery.get(handle, {"username": handle, "media": []})
 
     async def subscribe_webhooks(self, ig, fields="comments,messages"):
         self._hit("subscribe_webhooks", ig, fields)

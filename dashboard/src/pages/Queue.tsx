@@ -81,9 +81,13 @@ export function OpportunityCard({ o, onChange, onPosted }: { o: Opportunity; onC
           {o.approval.final_text && <blockquote className="quote">{o.approval.final_text}</blockquote>}
           {o.status === "approved" && o.source === "manual_link" && o.approval.final_text && (
             <div className="row">
-              <CopyButton text={o.approval.final_text} label="Copy comment" />
-              {o.url && <a className="btn sm" href={o.url} target="_blank" rel="noopener noreferrer">Open post</a>}
-              <Button size="sm" variant="primary" busy={action.busy} onClick={() => action.run(
+              {o.url ? <Button size="sm" variant="primary" onClick={() => {
+                const text = o.approval!.final_text!, url = o.url!;
+                // Copy while this tab still has focus, then open (both inside the click, so no popup block)
+                navigator.clipboard.writeText(text).then(() => toast("Comment copied. Paste it on the post."), () => toast("Couldn't copy", "bad"));
+                window.open(url, "_blank", "noopener,noreferrer");
+              }}>Copy & open post</Button> : <CopyButton text={o.approval.final_text} label="Copy comment" />}
+              <Button size="sm" busy={action.busy} onClick={() => action.run(
                 () => post(`/opportunities/${o.id}/mark-posted`), () => { toast("Marked as posted", "live"); onPosted?.(); done(); })}>
                 I posted it
               </Button>

@@ -7,7 +7,8 @@ from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 
-from app import growth
+from app import growth, workers
+from app.llm import llm_configured
 from app.api.automation import require_llm
 from app.api.opportunities import LOAD, serialize
 from app.api.sources import creator_dict, norm_handle
@@ -66,6 +67,26 @@ async def add_lead(body: LeadBody, user=Depends(current_user), session=Depends(g
     audit(session, user, "lead_added", "lead", lead.id, handle=lead.handle)
     await session.commit()
     return await lead_dict(session, lead)
+
+
+class LeadBulkBody(BaseModel):
+    handles: str = Field(min_length=1, max_length=20000)
+    niche: str | None = Field(None, max_length=100)
+
+
+@router.post("/leads/bulk")
+async def add_leads_bulk(body: LeadBulkBody, user=Depends(current_user), session=Depends(get_session)):
+    """Add many businesses at once; each is researched (profile read + pitch drafted) in the background."""
+    handles = growth.parse_handles(body.handles)[:100]
+    existing = set(await session.scalars(select(Lead.handle).where(Lead.handle.in_(handles))))
+    leads = [Lead(handle=h, niche=body.niche) for h in handles if h not in existing]
+    session.add_all(leads)
+    audit(session, user, "leads_bulk_added", "lead", None, added=len(leads))
+    await session.commit()
+    if llm_configured():
+        for lead in leads:
+            workers.enqueue_research(lead.id)
+    return {"added": [x.handle for x in leads], "skipped": sorted(existing), "researching": llm_configured()}
 
 
 @router.get("/leads/{lead_id}")
@@ -165,3 +186,27 @@ async def task_done(task_id: int, user=Depends(current_user), session=Depends(ge
         await session.commit()
     return {"ok": True, "done_at": task.done_at}
 
+
+
+@router.post("/engagement/fetch")
+async def fetch_creator_posts(session=Depends(get_session)):
+    """Read creators' latest posts now (also runs every morning at 6:30). Drafts follow in the background."""
+    r = await workers._fetch_creators(session)
+    return {k: v for k, v in r.items() if k != "new_post_ids"} | {"new": len(r["new_post_ids"])}
+
+
+@router.get("/engagement/follows")
+async def follows(session=Depends(get_session)):
+    return await growth.follow_list(session, growth.local_today())
+
+
+class FollowBody(BaseModel):
+    action: Literal["followed", "followed_back", "no_follow_back"]
+
+
+@router.post("/engagement/follows/{kind}/{item_id}")
+async def mark_follow(kind: Literal["creator", "lead"], item_id: int, body: FollowBody,
+                      user=Depends(current_user), session=Depends(get_session)):
+    if await growth.mark_follow(session, user, kind, item_id, body.action) is None:
+        raise HTTPException(404, f"{kind} not found")
+    return {"ok": True}
