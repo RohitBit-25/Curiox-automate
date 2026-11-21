@@ -64,6 +64,9 @@ class SendBody(BaseModel):
 
 
 async def _send(session, conv: Conversation, msg: Message, user: str, text: str) -> dict:
+    # Written or edited by you = a sample of your real voice for future drafts (prefs.voice_samples)
+    human = msg.meta is None or text.strip() != msg.text.strip()
+    msg.meta = {**(msg.meta or {}), "human_written": human}
     msg.text, msg.status, msg.actor = text, "approved", user
     audit(session, user, "dm_approved", "conversation", conv.id, message_id=msg.id)
     await session.commit()

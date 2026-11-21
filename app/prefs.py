@@ -4,7 +4,7 @@ from typing import Literal
 from pydantic import BaseModel, Field
 from sqlalchemy import select
 
-from app.models import AppSetting, audit
+from app.models import AUTO_ACTOR, AppSetting, Approval, CommentSuggestion, Message, audit
 
 DEFAULT_VOICE = {
     "handle": "curiox.os", "who": "", "audience": "", "offer": "",
@@ -87,6 +87,8 @@ async def save_settings(session, user: str, patch: SettingsPatch) -> dict:
 def voice_block(v: dict) -> str:
     def lines(xs):
         return "\n".join(f"- {x}" for x in xs) or "- (none set)"
+    learned = ("How the owner actually writes comments and DMs (their own words, newest first; match this register):\n"
+               + lines(v["learned"]) + "\n") if v.get("learned") else ""
     pillars = "\n".join(f"- {p['name']} ({p.get('share', 0)}%): {p.get('description', '')}".rstrip(": ")
                         for p in v.get("pillars", []))
     return f"""<voice>
@@ -102,6 +104,24 @@ Never:
 {lines(v.get('never', []))}
 Sounds like (real examples):
 {lines(v.get('examples', []))}
-Primary link: {v.get('cta_link') or '(none)'}
+{learned}Primary link: {v.get('cta_link') or '(none)'}
 Languages: {', '.join(v.get('languages') or ['en'])}
 </voice>"""
+
+
+async def voice_samples(session, limit: int = 8) -> list[str]:
+    """Comments and DMs the owner wrote or edited themselves: the best signal for how drafts should sound."""
+    dms = [(m.created_at, m.text) for m in await session.scalars(
+        select(Message).where(Message.direction == "out", Message.status == "sent", Message.actor != AUTO_ACTOR)
+        .order_by(Message.id.desc()).limit(60))
+        if m.text.strip() and (m.actor == "instagram_app" or (m.meta or {}).get("human_written"))]
+    comments = (await session.execute(
+        select(Approval.created_at, Approval.final_text).join(CommentSuggestion, CommentSuggestion.id == Approval.suggestion_id)
+        .where(Approval.decision == "approved", Approval.actor != AUTO_ACTOR, CommentSuggestion.edited)
+        .order_by(Approval.id.desc()).limit(limit))).all()
+    rows = sorted(dms + [tuple(r) for r in comments if r[1]], key=lambda r: r[0], reverse=True)
+    return [t.strip()[:300] for _, t in rows[:limit]]
+
+
+async def voice_with_samples(session) -> dict:
+    return (await get_settings(session))["voice"] | {"learned": await voice_samples(session)}

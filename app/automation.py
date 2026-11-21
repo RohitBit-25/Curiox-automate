@@ -10,7 +10,7 @@ from app import craft, pipeline, workers
 from app.config import settings
 from app.models import AUTO_ACTOR, Account, Approval, FunnelRule, FunnelSend, Post, audit, aware, now
 from app.platforms import PlatformError, get_adapter
-from app.prefs import get_settings
+from app.prefs import get_settings, voice_with_samples
 from app.rules import normalize
 
 COMMENT_AUTO = {"question", "support", "substance"}
@@ -125,7 +125,7 @@ async def maybe_auto_approve(session, post_id: int, llm) -> str:
     if post is None or post.status != "pending" or not post.suggestions or post.source != "own_comment":
         return "not_eligible"
     s = await get_settings(session)
-    d = await llm.json(pipeline.system_prompt(s["voice"]), pipeline.render(
+    d = await llm.json(pipeline.system_prompt(await voice_with_samples(session)), pipeline.render(
         "auto_decision.txt", parent=post.parent_text or "(caption not available)", author=post.author_handle or "unknown",
         comment=post.text, suggestions="\n".join(f"{i}. {x.text}" for i, x in enumerate(post.suggestions, 1)),
     ), DECISION_SCHEMA, "low")

@@ -63,3 +63,23 @@ async def test_dm_rewritten_and_never_auto_sent_if_still_slop(session, monkeypat
     draft = await inbox.draft_dm_reply(session, conv.id, FakeLLM({**DM, "reply": bot}, {"texts": [good]}),
                                        adapter_factory=FakeAdapter())
     assert draft.text == good and draft.status == "approved" and queued == [draft.id]
+
+
+async def test_learns_from_what_you_write(session):
+    from app.models import Approval, CommentSuggestion, Message, Post
+    from app.prefs import voice_block, voice_samples, voice_with_samples
+    conv = await seed_conv(session)
+    session.add_all([
+        Message(conversation_id=conv.id, direction="out", text="haan bhai kal tak bhej dunga", status="sent", actor="instagram_app"),
+        Message(conversation_id=conv.id, direction="out", text="AI draft sent as is", status="sent", actor="me",
+                meta={"human_written": False}),
+        Message(conversation_id=conv.id, direction="out", text="edited by me", status="sent", actor="me",
+                meta={"human_written": True}),
+        Message(conversation_id=conv.id, direction="out", text="auto reply", status="sent", actor="auto"),
+        Post(id=50, platform="instagram", source="manual_link", external_id="P50", text="x"),
+        CommentSuggestion(id=7, post_id=50, position=0, text="mine now", strategy="insight", edited=True),
+        Approval(post_id=50, suggestion_id=7, decision="approved", final_text="mine now", actor="me"),
+    ])
+    await session.commit()
+    assert set(await voice_samples(session)) == {"haan bhai kal tak bhej dunga", "edited by me", "mine now"}
+    assert "haan bhai kal tak bhej dunga" in voice_block(await voice_with_samples(session))

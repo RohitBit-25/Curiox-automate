@@ -15,7 +15,7 @@ from app.config import settings
 from app.content import creator_system
 from app.models import Account, BrandKnowledge, Creator, DailyTask, Lead, Post, audit, now
 from app.platforms import PlatformError, get_adapter
-from app.prefs import get_settings
+from app.prefs import get_settings, voice_with_samples
 
 log = logging.getLogger(__name__)
 # Business Discovery needs instagram_manage_insights; without it Meta says #10 / #200.
@@ -120,7 +120,7 @@ async def research_lead(session, lead_id: int, llm, adapter_factory=None) -> Lea
         return None
     if not lead.profile_text:
         await enrich_lead(session, lead, adapter_factory)
-    voice = (await get_settings(session))["voice"]
+    voice = await voice_with_samples(session)
     kn = [r for r in await session.scalars(select(BrandKnowledge))
           if r.kind == "profile" or (r.kind == "project" and r.verified)]
     d = await llm.json(creator_system(voice), pipeline.render(

@@ -110,7 +110,7 @@ async def process_post(session, post_id: int, llm) -> None:
     c = post.creator
     creator_note = f"topics: {', '.join(c.topics or [])}; audience: {c.audience_note or 'n/a'}" if c else "not in curated list"
 
-    system = system_prompt((await prefs.get_settings(session))["voice"])
+    system = system_prompt(await prefs.voice_with_samples(session))
     try:
         # Stage A: understand the post
         a = await llm.json(system, render(

@@ -9,7 +9,7 @@ from app.content import creator_system
 from app.models import (AUTO_ACTOR, Account, BrandKnowledge, Conversation, FunnelRule, FunnelSend, Lead, Message,
                         audit, aware, now)
 from app.platforms import PlatformError, get_adapter
-from app.prefs import get_settings
+from app.prefs import get_settings, voice_with_samples
 from app.rules import fingerprint
 
 WINDOW = timedelta(hours=24)
@@ -103,7 +103,8 @@ async def draft_dm_reply(session, conv_id: int, llm=None, adapter_factory=None, 
     rule = await session.get(FunnelRule, fsend.rule_id) if fsend else None
     left = WINDOW - (now() - aware(conv.last_inbound_at)) if conv.last_inbound_at else timedelta(0)
 
-    d = await llm.json(creator_system(s["voice"]), pipeline.render(
+    system = creator_system(await voice_with_samples(session))
+    d = await llm.json(system, pipeline.render(
         "dm_reply.txt", window_left=f"{max(left.total_seconds(), 0) / 3600:.0f}h",
         who=f"@{conv.username}" if conv.username else "unknown (Instagram id only)",
         lead_block=(f"Linked lead: @{lead.handle}, stage {lead.stage}, niche {lead.niche or '?'}, "
@@ -112,7 +113,6 @@ async def draft_dm_reply(session, conv_id: int, llm=None, adapter_factory=None, 
         knowledge="\n".join(f"- [{r.kind}] {r.title}: {r.content}" for r in kn) or "none",
         history="\n".join(f"{'them' if m.direction == 'in' else 'us'}: {m.text}" for m in history[-20:]),
     ), DM_SCHEMA, "low")
-    system = creator_system(s["voice"])
     text = (await pipeline.humanize(llm, system, [craft.scrub(d["reply"])], "DM reply"))[0]
 
     await session.execute(update(Message).where(Message.conversation_id == conv.id, Message.status == "draft")
