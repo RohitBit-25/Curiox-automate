@@ -154,7 +154,7 @@ class InstagramAdapter:
 
     async def business_discovery(self, handle: str, media_limit: int = 3) -> dict:
         """Public profile + recent posts of another business/creator account (read only).
-        Needs instagram_basic, instagram_manage_insights and pages_read_engagement. Never pauses the account."""
+        Needs instagram_basic + instagram_manage_insights. Never pauses the account."""
         j = await self._call("GET", f"{self.base}/{await self.ig_id()}", pause_codes=MSG_PAUSE, params={"fields": (
             f"business_discovery.username({handle}){{username,name,biography,website,followers_count,media_count,"
             f"media.limit({media_limit}){{id,caption,permalink,timestamp,media_product_type}}}}")})

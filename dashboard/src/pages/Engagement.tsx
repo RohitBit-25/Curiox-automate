@@ -90,7 +90,7 @@ function FetchPosts() {
         })}>Fetch now</Button>
       </div>
       {r?.status === "no_permission" && <div className="callout" style={{ marginTop: 10 }}><span className="xs">
-        Instagram won't let this app read other accounts yet. In the Meta app, add the <b>instagram_manage_insights</b> and <b>pages_read_engagement</b> permissions
+        Instagram won't let this app read other accounts yet. In the Meta app, add the <b>instagram_manage_insights</b> permission
         (Use cases → Instagram API → Permissions), generate a new token, and paste it in Settings. Until then, paste posts under Add post.</span></div>}
       {r?.status === "no_account" && <p className="xs bad-text" style={{ marginTop: 8 }}>Connect your Instagram account in Settings first.</p>}
       {r?.status === "ok" && r.failed.length > 0 && <p className="xs muted" style={{ marginTop: 8 }}>

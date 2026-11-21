@@ -18,7 +18,7 @@ from app.platforms import PlatformError, get_adapter
 from app.prefs import get_settings
 
 log = logging.getLogger(__name__)
-# Business Discovery needs instagram_manage_insights + pages_read_engagement; without them Meta says #10 / #200.
+# Business Discovery needs instagram_manage_insights; without it Meta says #10 / #200.
 NO_PERMISSION = {10, 200}
 FOLLOW_DAILY = 15  # ponytail: fixed; Instagram flags new accounts that follow much faster than this
 HANDLE_RE = re.compile(r"^[a-z0-9._]{1,30}$")
